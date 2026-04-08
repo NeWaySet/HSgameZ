@@ -4,6 +4,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonObject>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -21,6 +22,16 @@ MainWindow::MainWindow(QWidget *parent)
     updateTransportUi();
     updateUi();
     appendLog(QStringLiteral("Можно играть по сети или выбрать режим 'сам с собой' на одном компьютере."));
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+
+    if (m_privacyOverlay != nullptr && centralWidget() != nullptr)
+    {
+        m_privacyOverlay->setGeometry(centralWidget()->rect());
+    }
 }
 
 void MainWindow::hostSession()
@@ -488,6 +499,49 @@ void MainWindow::setupUi()
     setWindowTitle(QStringLiteral("Qt Battlegrounds"));
     resize(1240, 760);
 
+    m_privacyOverlay = new QWidget(central);
+    m_privacyOverlay->setAttribute(Qt::WA_StyledBackground, true);
+    m_privacyOverlay->setStyleSheet(QStringLiteral("background-color: rgba(12, 16, 24, 228);"));
+    m_privacyOverlay->setGeometry(central->rect());
+
+    auto *overlayLayout = new QVBoxLayout(m_privacyOverlay);
+    overlayLayout->setContentsMargins(48, 48, 48, 48);
+    overlayLayout->setAlignment(Qt::AlignCenter);
+
+    auto *overlayPanel = new QWidget(m_privacyOverlay);
+    overlayPanel->setAttribute(Qt::WA_StyledBackground, true);
+    overlayPanel->setStyleSheet(QStringLiteral(
+        "background-color: rgba(255, 248, 236, 242);"
+        "border: 2px solid rgba(127, 86, 44, 180);"
+        "border-radius: 18px;"));
+    overlayPanel->setMaximumWidth(520);
+
+    auto *overlayPanelLayout = new QVBoxLayout(overlayPanel);
+    overlayPanelLayout->setContentsMargins(32, 28, 32, 28);
+    overlayPanelLayout->setSpacing(14);
+
+    m_privacyTitleLabel = new QLabel(QStringLiteral("Передайте ход"), overlayPanel);
+    QFont overlayTitleFont = m_privacyTitleLabel->font();
+    overlayTitleFont.setPointSize(18);
+    overlayTitleFont.setBold(true);
+    m_privacyTitleLabel->setFont(overlayTitleFont);
+    m_privacyTitleLabel->setAlignment(Qt::AlignCenter);
+
+    m_privacyTextLabel = new QLabel(overlayPanel);
+    m_privacyTextLabel->setWordWrap(true);
+    m_privacyTextLabel->setAlignment(Qt::AlignCenter);
+
+    m_privacyRevealButton = new QPushButton(QStringLiteral("Показать ход"), overlayPanel);
+    m_privacyRevealButton->setMinimumHeight(40);
+
+    overlayPanelLayout->addWidget(m_privacyTitleLabel);
+    overlayPanelLayout->addWidget(m_privacyTextLabel);
+    overlayPanelLayout->addWidget(m_privacyRevealButton);
+    overlayLayout->addWidget(overlayPanel);
+
+    m_privacyOverlay->hide();
+    m_revealTurnButton->hide();
+
     connect(m_modeBox,
             qOverload<int>(&QComboBox::currentIndexChanged),
             this,
@@ -509,6 +563,7 @@ void MainWindow::setupUi()
     connect(m_readyButton, &QPushButton::clicked, this, &MainWindow::toggleReady);
     connect(m_switchPlayerButton, &QPushButton::clicked, this, &MainWindow::switchSelfPlayer);
     connect(m_revealTurnButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
+    connect(m_privacyRevealButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
 }
 
 void MainWindow::updateUi()
@@ -675,6 +730,27 @@ void MainWindow::updateUi()
                                    : QStringLiteral("Готов к бою"));
         m_switchPlayerButton->setEnabled(false);
         m_revealTurnButton->setEnabled(false);
+    }
+
+    const bool showPrivacyOverlay = selfPlay && m_selfPlayActive && m_selfViewLocked && !gameOver;
+    if (m_privacyOverlay != nullptr)
+    {
+        if (showPrivacyOverlay)
+        {
+            m_privacyTitleLabel->setText(QStringLiteral("Передайте ход"));
+            m_privacyTextLabel->setText(
+                QStringLiteral("Передайте устройство %1. Когда следующий игрок будет готов, нажмите кнопку ниже, чтобы открыть его фазу покупки.")
+                    .arg(currentSelfPlayer().hero.name));
+            m_privacyRevealButton->setEnabled(true);
+            m_privacyOverlay->setGeometry(centralWidget()->rect());
+            m_privacyOverlay->show();
+            m_privacyOverlay->raise();
+            m_privacyRevealButton->setFocus();
+        }
+        else
+        {
+            m_privacyOverlay->hide();
+        }
     }
 }
 

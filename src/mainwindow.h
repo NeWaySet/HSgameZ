@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTextEdit>
+#include <QWidget>
 
 #include <array>
 
@@ -20,6 +21,9 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void hostSession();
@@ -82,6 +86,10 @@ private:
     QPushButton *m_localGameButton = nullptr;
     QPushButton *m_switchPlayerButton = nullptr;
     QPushButton *m_revealTurnButton = nullptr;
+    QWidget *m_privacyOverlay = nullptr;
+    QLabel *m_privacyTitleLabel = nullptr;
+    QLabel *m_privacyTextLabel = nullptr;
+    QPushButton *m_privacyRevealButton = nullptr;
     QLabel *m_connectionLabel = nullptr;
     QLabel *m_statusLabel = nullptr;
     QLabel *m_roundLabel = nullptr;
