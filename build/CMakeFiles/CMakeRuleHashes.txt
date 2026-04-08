@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+b66a5b4e245790a014846890438db419 CMakeFiles/QtBattlegrounds_autogen
+b66a5b4e245790a014846890438db419 CMakeFiles/QtBattlegrounds_autogen_timestamp_deps
+705872d33fa2312a07119b1461c32abc QtBattlegrounds_autogen/timestamp

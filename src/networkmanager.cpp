@@ -2,7 +2,7 @@
 
 #include <QHostAddress>
 #include <QJsonDocument>
-
+#include <QBluetoothSocket>
 NetworkManager::NetworkManager(QObject *parent)
     : QObject(parent)
 {
@@ -122,7 +122,7 @@ bool NetworkManager::isConnected() const
 #ifdef HAS_QT_BLUETOOTH
     if (m_btSocket)
     {
-        return m_btSocket->state() == QBluetoothSocket::ConnectedState;
+        return m_btSocket->state() == QBluetoothSocket::SocketState::ConnectedState;
     }
 #endif
 
