@@ -1,0 +1,5 @@
+/home/zyukov-brbrbr/project/HSgameZ/build/CMakeFiles/QtBattlegrounds.dir
+/home/zyukov-brbrbr/project/HSgameZ/build/CMakeFiles/edit_cache.dir
+/home/zyukov-brbrbr/project/HSgameZ/build/CMakeFiles/rebuild_cache.dir
+/home/zyukov-brbrbr/project/HSgameZ/build/CMakeFiles/QtBattlegrounds_autogen_timestamp_deps.dir
+/home/zyukov-brbrbr/project/HSgameZ/build/CMakeFiles/QtBattlegrounds_autogen.dir
