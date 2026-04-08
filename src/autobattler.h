@@ -60,12 +60,19 @@ public:
 
     void resetMatch(const QString &localHeroName, const QString &remoteHeroName);
     void beginNextRound();
+    void resetPlayer(PlayerState &player, const QString &heroName);
+    void beginNextRound(PlayerState &player);
 
     bool refreshTavern(QString *errorMessage = nullptr);
+    bool refreshTavern(PlayerState &player, QString *errorMessage = nullptr);
     bool buyFromTavern(int index, QString *errorMessage = nullptr);
+    bool buyFromTavern(PlayerState &player, int index, QString *errorMessage = nullptr);
     bool playFromHand(int index, QString *errorMessage = nullptr);
+    bool playFromHand(PlayerState &player, int index, QString *errorMessage = nullptr);
     bool sellFromBoard(int index, QString *errorMessage = nullptr);
+    bool sellFromBoard(PlayerState &player, int index, QString *errorMessage = nullptr);
     void setLocalReady(bool ready);
+    void setPlayerReady(PlayerState &player, bool ready);
 
     PlayerState &localPlayer();
     const PlayerState &localPlayer() const;
@@ -76,6 +83,7 @@ public:
     void setRemoteHeroHealth(int health);
 
     PlayerSnapshot makeLocalSnapshot() const;
+    PlayerSnapshot makeSnapshot(const PlayerState &player) const;
 
     static BattleResult resolveBattle(const PlayerSnapshot &hostPlayer, const PlayerSnapshot &clientPlayer);
     static QString formatCard(const MinionCard &card);

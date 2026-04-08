@@ -75,14 +75,7 @@ AutoBattlerGame::AutoBattlerGame()
 void AutoBattlerGame::resetMatch(const QString &localHeroName, const QString &remoteHeroName)
 {
     m_nextInstanceId = 1;
-    m_localPlayer = {};
-    m_localPlayer.hero.name = localHeroName;
-    m_localPlayer.hero.health = 30;
-    m_localPlayer.round = 1;
-    m_localPlayer.maxGold = 3;
-    m_localPlayer.gold = 3;
-    m_localPlayer.ready = false;
-    refillTavern();
+    resetPlayer(m_localPlayer, localHeroName);
 
     m_remotePlayer = {};
     m_remotePlayer.heroName = remoteHeroName;
@@ -93,16 +86,50 @@ void AutoBattlerGame::resetMatch(const QString &localHeroName, const QString &re
 
 void AutoBattlerGame::beginNextRound()
 {
-    m_localPlayer.round += 1;
-    m_localPlayer.maxGold = std::min(10, m_localPlayer.round + 2);
-    m_localPlayer.gold = m_localPlayer.maxGold;
-    m_localPlayer.ready = false;
-    refillTavern();
+    beginNextRound(m_localPlayer);
+}
+
+void AutoBattlerGame::resetPlayer(PlayerState &player, const QString &heroName)
+{
+    player = {};
+    player.hero.name = heroName;
+    player.hero.health = 30;
+    player.round = 1;
+    player.maxGold = 3;
+    player.gold = 3;
+    player.ready = false;
+
+    player.tavern.clear();
+    player.tavern.reserve(7);
+    for (int i = 0; i < 7; ++i)
+    {
+        player.tavern.append(drawRandomCard());
+    }
+}
+
+void AutoBattlerGame::beginNextRound(PlayerState &player)
+{
+    player.round += 1;
+    player.maxGold = std::min(10, player.round + 2);
+    player.gold = player.maxGold;
+    player.ready = false;
+
+    player.tavern.clear();
+    player.tavern.reserve(7);
+    for (int i = 0; i < 7; ++i)
+    {
+        player.tavern.append(drawRandomCard());
+    }
 }
 
 bool AutoBattlerGame::refreshTavern(QString *errorMessage)
 {
-    if (m_localPlayer.ready)
+    return refreshTavern(m_localPlayer, errorMessage);
+}
+
+bool AutoBattlerGame::refreshTavern(PlayerState &player, QString *errorMessage)
+{
+    if (player.ready)
     {
         if (errorMessage)
         {
@@ -111,7 +138,7 @@ bool AutoBattlerGame::refreshTavern(QString *errorMessage)
         return false;
     }
 
-    if (m_localPlayer.gold < 1)
+    if (player.gold < 1)
     {
         if (errorMessage)
         {
@@ -120,14 +147,24 @@ bool AutoBattlerGame::refreshTavern(QString *errorMessage)
         return false;
     }
 
-    m_localPlayer.gold -= 1;
-    refillTavern();
+    player.gold -= 1;
+    player.tavern.clear();
+    player.tavern.reserve(7);
+    for (int i = 0; i < 7; ++i)
+    {
+        player.tavern.append(drawRandomCard());
+    }
     return true;
 }
 
 bool AutoBattlerGame::buyFromTavern(int index, QString *errorMessage)
 {
-    if (m_localPlayer.ready)
+    return buyFromTavern(m_localPlayer, index, errorMessage);
+}
+
+bool AutoBattlerGame::buyFromTavern(PlayerState &player, int index, QString *errorMessage)
+{
+    if (player.ready)
     {
         if (errorMessage)
         {
@@ -136,7 +173,7 @@ bool AutoBattlerGame::buyFromTavern(int index, QString *errorMessage)
         return false;
     }
 
-    if (index < 0 || index >= m_localPlayer.tavern.size())
+    if (index < 0 || index >= player.tavern.size())
     {
         if (errorMessage)
         {
@@ -145,7 +182,7 @@ bool AutoBattlerGame::buyFromTavern(int index, QString *errorMessage)
         return false;
     }
 
-    if (m_localPlayer.hand.size() >= 10)
+    if (player.hand.size() >= 10)
     {
         if (errorMessage)
         {
@@ -154,8 +191,8 @@ bool AutoBattlerGame::buyFromTavern(int index, QString *errorMessage)
         return false;
     }
 
-    const MinionCard card = m_localPlayer.tavern.at(index);
-    if (m_localPlayer.gold < card.cost)
+    const MinionCard card = player.tavern.at(index);
+    if (player.gold < card.cost)
     {
         if (errorMessage)
         {
@@ -164,15 +201,20 @@ bool AutoBattlerGame::buyFromTavern(int index, QString *errorMessage)
         return false;
     }
 
-    m_localPlayer.gold -= card.cost;
-    m_localPlayer.hand.append(card);
-    m_localPlayer.tavern.removeAt(index);
+    player.gold -= card.cost;
+    player.hand.append(card);
+    player.tavern.removeAt(index);
     return true;
 }
 
 bool AutoBattlerGame::playFromHand(int index, QString *errorMessage)
 {
-    if (m_localPlayer.ready)
+    return playFromHand(m_localPlayer, index, errorMessage);
+}
+
+bool AutoBattlerGame::playFromHand(PlayerState &player, int index, QString *errorMessage)
+{
+    if (player.ready)
     {
         if (errorMessage)
         {
@@ -181,7 +223,7 @@ bool AutoBattlerGame::playFromHand(int index, QString *errorMessage)
         return false;
     }
 
-    if (index < 0 || index >= m_localPlayer.hand.size())
+    if (index < 0 || index >= player.hand.size())
     {
         if (errorMessage)
         {
@@ -190,7 +232,7 @@ bool AutoBattlerGame::playFromHand(int index, QString *errorMessage)
         return false;
     }
 
-    if (m_localPlayer.board.size() >= 7)
+    if (player.board.size() >= 7)
     {
         if (errorMessage)
         {
@@ -199,14 +241,19 @@ bool AutoBattlerGame::playFromHand(int index, QString *errorMessage)
         return false;
     }
 
-    m_localPlayer.board.append(m_localPlayer.hand.at(index));
-    m_localPlayer.hand.removeAt(index);
+    player.board.append(player.hand.at(index));
+    player.hand.removeAt(index);
     return true;
 }
 
 bool AutoBattlerGame::sellFromBoard(int index, QString *errorMessage)
 {
-    if (m_localPlayer.ready)
+    return sellFromBoard(m_localPlayer, index, errorMessage);
+}
+
+bool AutoBattlerGame::sellFromBoard(PlayerState &player, int index, QString *errorMessage)
+{
+    if (player.ready)
     {
         if (errorMessage)
         {
@@ -215,7 +262,7 @@ bool AutoBattlerGame::sellFromBoard(int index, QString *errorMessage)
         return false;
     }
 
-    if (index < 0 || index >= m_localPlayer.board.size())
+    if (index < 0 || index >= player.board.size())
     {
         if (errorMessage)
         {
@@ -224,14 +271,19 @@ bool AutoBattlerGame::sellFromBoard(int index, QString *errorMessage)
         return false;
     }
 
-    m_localPlayer.board.removeAt(index);
-    m_localPlayer.gold = std::min(m_localPlayer.maxGold, m_localPlayer.gold + 1);
+    player.board.removeAt(index);
+    player.gold = std::min(player.maxGold, player.gold + 1);
     return true;
 }
 
 void AutoBattlerGame::setLocalReady(bool ready)
 {
-    m_localPlayer.ready = ready;
+    setPlayerReady(m_localPlayer, ready);
+}
+
+void AutoBattlerGame::setPlayerReady(PlayerState &player, bool ready)
+{
+    player.ready = ready;
 }
 
 AutoBattlerGame::PlayerState &AutoBattlerGame::localPlayer()
@@ -271,12 +323,17 @@ void AutoBattlerGame::setRemoteHeroHealth(int health)
 
 AutoBattlerGame::PlayerSnapshot AutoBattlerGame::makeLocalSnapshot() const
 {
+    return makeSnapshot(m_localPlayer);
+}
+
+AutoBattlerGame::PlayerSnapshot AutoBattlerGame::makeSnapshot(const PlayerState &player) const
+{
     PlayerSnapshot snapshot;
-    snapshot.heroName = m_localPlayer.hero.name;
-    snapshot.heroHealth = m_localPlayer.hero.health;
-    snapshot.round = m_localPlayer.round;
-    snapshot.ready = m_localPlayer.ready;
-    snapshot.board = m_localPlayer.board;
+    snapshot.heroName = player.hero.name;
+    snapshot.heroHealth = player.hero.health;
+    snapshot.round = player.round;
+    snapshot.ready = player.ready;
+    snapshot.board = player.board;
     return snapshot;
 }
 
@@ -310,7 +367,7 @@ AutoBattlerGame::BattleResult AutoBattlerGame::resolveBattle(const PlayerSnapsho
         QVector<SimMinion> &defenders = hostTurn ? clientBoard : hostBoard;
 
         resetCycleIfNeeded(attackers);
-        int attackerIndex = nextAttackerIndex(attackers);
+        const int attackerIndex = nextAttackerIndex(attackers);
         if (attackerIndex < 0)
         {
             hostTurn = !hostTurn;
