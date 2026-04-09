@@ -7,7 +7,9 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonObject>
+#include <QList>
 #include <QResizeEvent>
+#include <QScrollArea>
 #include <QScreen>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -647,16 +649,24 @@ void MainWindow::setupUi()
     contentSplitter->setHandleWidth(10);
     contentSplitter->setObjectName(QStringLiteral("contentSplitter"));
 
-    auto *sidebarWidget = new QWidget(contentSplitter);
+    auto *sidebarScroll = new QScrollArea(contentSplitter);
+    sidebarScroll->setObjectName(QStringLiteral("sidebarScroll"));
+    sidebarScroll->setWidgetResizable(true);
+    sidebarScroll->setFrameShape(QFrame::NoFrame);
+    sidebarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    sidebarScroll->setMinimumWidth(330);
+    sidebarScroll->setMaximumWidth(460);
+
+    auto *sidebarWidget = new QWidget(sidebarScroll);
     sidebarWidget->setObjectName(QStringLiteral("sidebarWidget"));
-    sidebarWidget->setMinimumWidth(320);
-    sidebarWidget->setMaximumWidth(430);
     auto *leftColumn = new QVBoxLayout(sidebarWidget);
-    leftColumn->setContentsMargins(0, 0, 0, 0);
+    leftColumn->setContentsMargins(0, 0, 10, 0);
     leftColumn->setSpacing(16);
+    sidebarScroll->setWidget(sidebarWidget);
 
     auto *dashboardWidget = new QWidget(contentSplitter);
     dashboardWidget->setObjectName(QStringLiteral("dashboardWidget"));
+    dashboardWidget->setMinimumWidth(620);
     auto *dashboardLayout = new QGridLayout(dashboardWidget);
     dashboardLayout->setContentsMargins(0, 0, 0, 0);
     dashboardLayout->setHorizontalSpacing(16);
@@ -665,6 +675,11 @@ void MainWindow::setupUi()
     auto *networkBox = new QGroupBox(QStringLiteral("Режим и сеть"), this);
     networkBox->setObjectName(QStringLiteral("networkBox"));
     auto *networkLayout = new QFormLayout(networkBox);
+    networkLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    networkLayout->setFormAlignment(Qt::AlignTop);
+    networkLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    networkLayout->setVerticalSpacing(10);
+    networkLayout->setHorizontalSpacing(12);
 
     m_modeBox = new QComboBox(networkBox);
     m_modeBox->addItem(QStringLiteral("По сети"), static_cast<int>(SessionMode::Network));
@@ -689,6 +704,7 @@ void MainWindow::setupUi()
     m_applyNamesButton = new QPushButton(QStringLiteral("Применить имена"), networkBox);
     m_connectionLabel = new QLabel(QStringLiteral("Нет подключения"), networkBox);
     m_connectionLabel->setWordWrap(true);
+    m_connectionLabel->setMinimumHeight(44);
 
     networkLayout->addRow(QStringLiteral("Режим"), m_modeBox);
     networkLayout->addRow(QStringLiteral("Игрок 1"), m_localNameEdit);
@@ -705,6 +721,11 @@ void MainWindow::setupUi()
     auto *stateBox = new QGroupBox(QStringLiteral("Состояние матча"), this);
     stateBox->setObjectName(QStringLiteral("stateBox"));
     auto *stateLayout = new QFormLayout(stateBox);
+    stateLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    stateLayout->setFormAlignment(Qt::AlignTop);
+    stateLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    stateLayout->setVerticalSpacing(10);
+    stateLayout->setHorizontalSpacing(12);
     m_activePlayerLabel = new QLabel(stateBox);
     m_roundLabel = new QLabel(stateBox);
     m_goldLabel = new QLabel(stateBox);
@@ -715,7 +736,7 @@ void MainWindow::setupUi()
     m_remoteHeroLabel->setWordWrap(true);
     m_statusLabel = new QLabel(QStringLiteral("Выберите режим и начните матч."), stateBox);
     m_statusLabel->setWordWrap(true);
-    m_statusLabel->setMinimumHeight(54);
+    m_statusLabel->setMinimumHeight(84);
 
     stateLayout->addRow(QStringLiteral("Активный игрок"), m_activePlayerLabel);
     stateLayout->addRow(QStringLiteral("Раунд"), m_roundLabel);
@@ -742,6 +763,40 @@ void MainWindow::setupUi()
     fullscreenHintLabel->setWordWrap(true);
     auto *fullscreenButton = new QPushButton(QStringLiteral("Полный экран"), actionsBox);
     fullscreenButton->setObjectName(QStringLiteral("fullscreenButton"));
+
+    const QList<QWidget *> compactInputs = {
+        m_modeBox,
+        m_transportBox,
+        m_localNameEdit,
+        m_secondNameEdit,
+        m_addressEdit,
+        m_portSpin
+    };
+    for (QWidget *input : compactInputs)
+    {
+        input->setMinimumHeight(34);
+    }
+
+    const QList<QPushButton *> actionButtons = {
+        m_hostButton,
+        m_connectButton,
+        m_localGameButton,
+        m_applyNamesButton,
+        m_refreshButton,
+        m_buyButton,
+        m_playButton,
+        m_sellButton,
+        m_attackMinionButton,
+        m_attackHeroButton,
+        m_readyButton,
+        m_switchPlayerButton,
+        m_revealTurnButton,
+        fullscreenButton
+    };
+    for (QPushButton *button : actionButtons)
+    {
+        button->setMinimumHeight(36);
+    }
 
     actionsLayout->addWidget(m_refreshButton);
     actionsLayout->addWidget(m_buyButton);
@@ -820,7 +875,7 @@ void MainWindow::setupUi()
     dashboardLayout->setRowStretch(1, 4);
     dashboardLayout->setRowStretch(2, 3);
 
-    contentSplitter->addWidget(sidebarWidget);
+    contentSplitter->addWidget(sidebarScroll);
     contentSplitter->addWidget(dashboardWidget);
     contentSplitter->setStretchFactor(0, 0);
     contentSplitter->setStretchFactor(1, 1);
@@ -854,6 +909,13 @@ void MainWindow::setupUi()
         "QLabel#fullscreenHintLabel {"
         "  color: rgba(255, 231, 188, 180);"
         "  font: 9.5pt 'Segoe UI';"
+        "}"
+        "QScrollArea#sidebarScroll {"
+        "  background: transparent;"
+        "  border: none;"
+        "}"
+        "QWidget#sidebarWidget, QWidget#dashboardWidget {"
+        "  background: transparent;"
         "}"
         "QSplitter::handle {"
         "  background: transparent;"
@@ -931,6 +993,9 @@ void MainWindow::setupUi()
         "}"
         "QPushButton#fullscreenButton {"
         "  min-height: 38px;"
+        "}"
+        "QPushButton, QLineEdit, QComboBox, QSpinBox {"
+        "  min-height: 34px;"
         "}"
         "QPushButton:hover {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
