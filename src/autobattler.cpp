@@ -96,6 +96,63 @@ void removeDead(QVector<AutoBattlerGame::MinionCard> &board, QStringList *log, c
     }
 }
 
+void resolveMinionAttack(QVector<AutoBattlerGame::MinionCard> &attackerBoard,
+                         QVector<AutoBattlerGame::MinionCard> &defenderBoard,
+                         int attackerIndex,
+                         int targetIndex,
+                         const QString &attackerOwner,
+                         const QString &defenderOwner,
+                         QStringList *log)
+{
+    const QString attackerName = attackerBoard[attackerIndex].name;
+    const QString defenderName = defenderBoard[targetIndex].name;
+    const int attackerDamage = attackerBoard[attackerIndex].attack;
+    const int defenderDamage = defenderBoard[targetIndex].attack;
+
+    if (log != nullptr)
+    {
+        log->append(QStringLiteral("%1 атакует %2.").arg(attackerName, defenderName));
+    }
+
+    defenderBoard[targetIndex].health -= attackerDamage;
+    attackerBoard[attackerIndex].health -= defenderDamage;
+    attackerBoard[attackerIndex].hasAttacked = true;
+
+    if (log != nullptr)
+    {
+        if (defenderBoard[targetIndex].health > 0)
+        {
+            log->append(QStringLiteral("%1 получает %2 урона и остаётся с %3 здоровья.")
+                            .arg(defenderName)
+                            .arg(attackerDamage)
+                            .arg(defenderBoard[targetIndex].health));
+        }
+        else
+        {
+            log->append(QStringLiteral("%1 получает %2 урона и погибает от удара.")
+                            .arg(defenderName)
+                            .arg(attackerDamage));
+        }
+
+        if (attackerBoard[attackerIndex].health > 0)
+        {
+            log->append(QStringLiteral("%1 получает ответные %2 урона и остаётся с %3 здоровья.")
+                            .arg(attackerName)
+                            .arg(defenderDamage)
+                            .arg(attackerBoard[attackerIndex].health));
+        }
+        else
+        {
+            log->append(QStringLiteral("%1 получает ответные %2 урона и погибает.")
+                            .arg(attackerName)
+                            .arg(defenderDamage));
+        }
+    }
+
+    removeDead(attackerBoard, log, attackerOwner);
+    removeDead(defenderBoard, log, defenderOwner);
+}
+
 void resetCycleIfNeeded(QVector<SimMinion> &board)
 {
     if (!board.isEmpty() && allAttacked(board))
@@ -431,19 +488,13 @@ bool AutoBattlerGame::attackMinion(PlayerState &attacker,
         }
         return false;
     }
-
-    if (log != nullptr)
-    {
-        log->append(QStringLiteral("%1 атакует %2.")
-                        .arg(attacker.board[attackerIndex].name, defender.board[targetIndex].name));
-    }
-
-    defender.board[targetIndex].health -= attacker.board[attackerIndex].attack;
-    attacker.board[attackerIndex].health -= defender.board[targetIndex].attack;
-    attacker.board[attackerIndex].hasAttacked = true;
-
-    removeDead(attacker.board, log, attacker.hero.name);
-    removeDead(defender.board, log, defender.hero.name);
+    resolveMinionAttack(attacker.board,
+                        defender.board,
+                        attackerIndex,
+                        targetIndex,
+                        attacker.hero.name,
+                        defender.hero.name,
+                        log);
     return true;
 }
 
@@ -536,19 +587,13 @@ bool AutoBattlerGame::attackRemoteMinion(int attackerIndex,
         }
         return false;
     }
-
-    if (log != nullptr)
-    {
-        log->append(QStringLiteral("%1 атакует %2.")
-                        .arg(m_localPlayer.board[attackerIndex].name, m_remotePlayer.board[targetIndex].name));
-    }
-
-    m_remotePlayer.board[targetIndex].health -= m_localPlayer.board[attackerIndex].attack;
-    m_localPlayer.board[attackerIndex].health -= m_remotePlayer.board[targetIndex].attack;
-    m_localPlayer.board[attackerIndex].hasAttacked = true;
-
-    removeDead(m_localPlayer.board, log, m_localPlayer.hero.name);
-    removeDead(m_remotePlayer.board, log, m_remotePlayer.heroName);
+    resolveMinionAttack(m_localPlayer.board,
+                        m_remotePlayer.board,
+                        attackerIndex,
+                        targetIndex,
+                        m_localPlayer.hero.name,
+                        m_remotePlayer.heroName,
+                        log);
     return true;
 }
 
