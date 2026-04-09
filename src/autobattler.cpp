@@ -60,6 +60,13 @@ bool hasTaunt(const QVector<SimMinion> &board)
     });
 }
 
+bool hasTaunt(const QVector<AutoBattlerGame::MinionCard> &board)
+{
+    return std::any_of(board.cbegin(), board.cend(), [](const AutoBattlerGame::MinionCard &minion) {
+        return minion.taunt;
+    });
+}
+
 QVector<int> tauntIndexes(const QVector<SimMinion> &board)
 {
     QVector<int> indexes;
@@ -71,6 +78,22 @@ QVector<int> tauntIndexes(const QVector<SimMinion> &board)
         }
     }
     return indexes;
+}
+
+void removeDead(QVector<AutoBattlerGame::MinionCard> &board, QStringList *log, const QString &ownerName)
+{
+    for (int index = board.size() - 1; index >= 0; --index)
+    {
+        if (board[index].health <= 0)
+        {
+            if (log != nullptr)
+            {
+                log->append(QStringLiteral("%1: %2 погибает.")
+                                .arg(ownerName, board[index].name));
+            }
+            board.removeAt(index);
+        }
+    }
 }
 
 void resetCycleIfNeeded(QVector<SimMinion> &board)
@@ -122,7 +145,7 @@ void AutoBattlerGame::beginNextRound()
 void AutoBattlerGame::resetPlayer(PlayerState &player, const QString &heroName)
 {
     player = {};
-    player.hero.name = heroName;
+    player.hero.name = heroName.trimmed().isEmpty() ? QStringLiteral("Игрок") : heroName.trimmed();
     player.hero.health = 30;
     player.round = 1;
     player.maxGold = 3;
@@ -144,12 +167,22 @@ void AutoBattlerGame::beginNextRound(PlayerState &player)
     player.gold = player.maxGold;
     player.ready = false;
 
+    for (MinionCard &card : player.board)
+    {
+        card.hasAttacked = false;
+    }
+
     player.tavern.clear();
     player.tavern.reserve(7);
     for (int i = 0; i < 7; ++i)
     {
         player.tavern.append(drawRandomCard());
     }
+}
+
+void AutoBattlerGame::setHeroName(PlayerState &player, const QString &heroName)
+{
+    player.hero.name = heroName.trimmed().isEmpty() ? QStringLiteral("Игрок") : heroName.trimmed();
 }
 
 bool AutoBattlerGame::refreshTavern(QString *errorMessage)
@@ -351,6 +384,221 @@ void AutoBattlerGame::setRemoteHeroHealth(int health)
     m_remotePlayer.heroHealth = health;
 }
 
+void AutoBattlerGame::setRemoteHeroName(const QString &heroName)
+{
+    m_remotePlayer.heroName = heroName.trimmed().isEmpty() ? QStringLiteral("Соперник") : heroName.trimmed();
+}
+
+bool AutoBattlerGame::attackMinion(PlayerState &attacker,
+                                   PlayerState &defender,
+                                   int attackerIndex,
+                                   int targetIndex,
+                                   QString *errorMessage,
+                                   QStringList *log)
+{
+    if (attackerIndex < 0 || attackerIndex >= attacker.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите своё существо на столе.");
+        }
+        return false;
+    }
+
+    if (targetIndex < 0 || targetIndex >= defender.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите вражеское существо.");
+        }
+        return false;
+    }
+
+    if (attacker.board[attackerIndex].hasAttacked)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Это существо уже атаковало в этом раунде.");
+        }
+        return false;
+    }
+
+    if (hasTaunt(defender.board) && !defender.board[targetIndex].taunt)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Сначала нужно атаковать существо с Провокацией.");
+        }
+        return false;
+    }
+
+    if (log != nullptr)
+    {
+        log->append(QStringLiteral("%1 атакует %2.")
+                        .arg(attacker.board[attackerIndex].name, defender.board[targetIndex].name));
+    }
+
+    defender.board[targetIndex].health -= attacker.board[attackerIndex].attack;
+    attacker.board[attackerIndex].health -= defender.board[targetIndex].attack;
+    attacker.board[attackerIndex].hasAttacked = true;
+
+    removeDead(attacker.board, log, attacker.hero.name);
+    removeDead(defender.board, log, defender.hero.name);
+    return true;
+}
+
+bool AutoBattlerGame::attackHero(PlayerState &attacker,
+                                 PlayerState &defender,
+                                 int attackerIndex,
+                                 QString *errorMessage,
+                                 QStringList *log)
+{
+    if (attackerIndex < 0 || attackerIndex >= attacker.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите своё существо на столе.");
+        }
+        return false;
+    }
+
+    if (attacker.board[attackerIndex].hasAttacked)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Это существо уже атаковало в этом раунде.");
+        }
+        return false;
+    }
+
+    if (hasTaunt(defender.board))
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Нельзя атаковать героя, пока на столе есть Провокация.");
+        }
+        return false;
+    }
+
+    defender.hero.health = std::max(0, defender.hero.health - attacker.board[attackerIndex].attack);
+    attacker.board[attackerIndex].hasAttacked = true;
+
+    if (log != nullptr)
+    {
+        log->append(QStringLiteral("%1 атакует героя %2 и наносит %3 урона.")
+                        .arg(attacker.board[attackerIndex].name, defender.hero.name)
+                        .arg(attacker.board[attackerIndex].attack));
+        log->append(QStringLiteral("У героя %1 остаётся %2 здоровья.")
+                        .arg(defender.hero.name)
+                        .arg(defender.hero.health));
+    }
+
+    return true;
+}
+
+bool AutoBattlerGame::attackRemoteMinion(int attackerIndex,
+                                         int targetIndex,
+                                         QString *errorMessage,
+                                         QStringList *log)
+{
+    if (attackerIndex < 0 || attackerIndex >= m_localPlayer.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите своё существо на столе.");
+        }
+        return false;
+    }
+
+    if (targetIndex < 0 || targetIndex >= m_remotePlayer.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите вражеское существо.");
+        }
+        return false;
+    }
+
+    if (m_localPlayer.board[attackerIndex].hasAttacked)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Это существо уже атаковало в этом раунде.");
+        }
+        return false;
+    }
+
+    if (hasTaunt(m_remotePlayer.board) && !m_remotePlayer.board[targetIndex].taunt)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Сначала нужно атаковать существо с Провокацией.");
+        }
+        return false;
+    }
+
+    if (log != nullptr)
+    {
+        log->append(QStringLiteral("%1 атакует %2.")
+                        .arg(m_localPlayer.board[attackerIndex].name, m_remotePlayer.board[targetIndex].name));
+    }
+
+    m_remotePlayer.board[targetIndex].health -= m_localPlayer.board[attackerIndex].attack;
+    m_localPlayer.board[attackerIndex].health -= m_remotePlayer.board[targetIndex].attack;
+    m_localPlayer.board[attackerIndex].hasAttacked = true;
+
+    removeDead(m_localPlayer.board, log, m_localPlayer.hero.name);
+    removeDead(m_remotePlayer.board, log, m_remotePlayer.heroName);
+    return true;
+}
+
+bool AutoBattlerGame::attackRemoteHero(int attackerIndex,
+                                       QString *errorMessage,
+                                       QStringList *log)
+{
+    if (attackerIndex < 0 || attackerIndex >= m_localPlayer.board.size())
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Выберите своё существо на столе.");
+        }
+        return false;
+    }
+
+    if (m_localPlayer.board[attackerIndex].hasAttacked)
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Это существо уже атаковало в этом раунде.");
+        }
+        return false;
+    }
+
+    if (hasTaunt(m_remotePlayer.board))
+    {
+        if (errorMessage)
+        {
+            *errorMessage = QStringLiteral("Нельзя атаковать героя, пока на столе есть Провокация.");
+        }
+        return false;
+    }
+
+    m_remotePlayer.heroHealth = std::max(0, m_remotePlayer.heroHealth - m_localPlayer.board[attackerIndex].attack);
+    m_localPlayer.board[attackerIndex].hasAttacked = true;
+
+    if (log != nullptr)
+    {
+        log->append(QStringLiteral("%1 атакует героя %2 и наносит %3 урона.")
+                        .arg(m_localPlayer.board[attackerIndex].name, m_remotePlayer.heroName)
+                        .arg(m_localPlayer.board[attackerIndex].attack));
+        log->append(QStringLiteral("У героя %1 остаётся %2 здоровья.")
+                        .arg(m_remotePlayer.heroName)
+                        .arg(m_remotePlayer.heroHealth));
+    }
+
+    return true;
+}
+
 AutoBattlerGame::PlayerSnapshot AutoBattlerGame::makeLocalSnapshot() const
 {
     return makeSnapshot(m_localPlayer);
@@ -514,9 +762,10 @@ QString AutoBattlerGame::formatCard(const MinionCard &card)
 
 QString AutoBattlerGame::formatBoardCard(const MinionCard &card)
 {
-    return QString("%1%2 | %3/%4")
+    return QString("%1%2%3 | %4/%5")
         .arg(card.name)
         .arg(card.taunt ? QStringLiteral(" | Провокация") : QString())
+        .arg(card.hasAttacked ? QStringLiteral(" | Уже атаковал") : QStringLiteral(" | Готов атаковать"))
         .arg(card.attack)
         .arg(card.health);
 }
@@ -610,6 +859,7 @@ AutoBattlerGame::MinionCard AutoBattlerGame::drawRandomCard()
     card.health = base.health;
     card.cost = base.cost;
     card.taunt = base.taunt;
+    card.hasAttacked = false;
     return card;
 }
 
@@ -632,6 +882,7 @@ QJsonObject AutoBattlerGame::cardToJson(const MinionCard &card)
     object.insert(QStringLiteral("health"), card.health);
     object.insert(QStringLiteral("cost"), card.cost);
     object.insert(QStringLiteral("taunt"), card.taunt);
+    object.insert(QStringLiteral("hasAttacked"), card.hasAttacked);
     return object;
 }
 
@@ -644,6 +895,7 @@ AutoBattlerGame::MinionCard AutoBattlerGame::cardFromJson(const QJsonObject &obj
     card.health = object.value(QStringLiteral("health")).toInt(0);
     card.cost = object.value(QStringLiteral("cost")).toInt(3);
     card.taunt = object.value(QStringLiteral("taunt")).toBool(false);
+    card.hasAttacked = object.value(QStringLiteral("hasAttacked")).toBool(false);
     return card;
 }
 

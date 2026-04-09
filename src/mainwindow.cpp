@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QJsonObject>
 #include <QResizeEvent>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -72,11 +73,17 @@ void MainWindow::startSelfGame()
     m_selfPlayActive = true;
     m_activeSelfPlayer = 0;
     m_selfViewLocked = false;
-    m_game.resetPlayer(m_selfPlayers[0], QStringLiteral("Игрок 1"));
-    m_game.resetPlayer(m_selfPlayers[1], QStringLiteral("Игрок 2"));
+    const QString firstName = m_localNameEdit->text().trimmed().isEmpty()
+        ? QStringLiteral("Игрок 1")
+        : m_localNameEdit->text().trimmed();
+    const QString secondName = m_secondNameEdit->text().trimmed().isEmpty()
+        ? QStringLiteral("Игрок 2")
+        : m_secondNameEdit->text().trimmed();
+    m_game.resetPlayer(m_selfPlayers[0], firstName);
+    m_game.resetPlayer(m_selfPlayers[1], secondName);
     m_battleLog->clear();
-    m_statusLabel->setText(QStringLiteral("Локальная игра началась. Ход игрока 1."));
-    appendLog(QStringLiteral("Запущен режим 'сам с собой'. Сначала закупается Игрок 1."));
+    m_statusLabel->setText(QStringLiteral("Локальная игра началась. Ходит %1.").arg(firstName));
+    appendLog(QStringLiteral("Запущен режим 'сам с собой'. Сначала закупается %1.").arg(firstName));
     updateUi();
 }
 
@@ -246,6 +253,148 @@ void MainWindow::sellSelectedMinion()
     syncLocalState();
 }
 
+void MainWindow::attackSelectedMinion()
+{
+    QString error;
+    QStringList log;
+
+    if (isSelfPlayMode())
+    {
+        if (!m_selfPlayActive)
+        {
+            showError(QStringLiteral("Сначала начните локальную игру."));
+            return;
+        }
+
+        if (!m_game.attackMinion(currentSelfPlayer(),
+                                 otherSelfPlayer(),
+                                 m_localBoardList->currentRow(),
+                                 m_remoteBoardList->currentRow(),
+                                 &error,
+                                 &log))
+        {
+            showError(error);
+            return;
+        }
+
+        appendLog(QStringLiteral("========== АТАКА =========="));
+        appendBattleLog(log);
+        applyGameOverStatus();
+        updateUi();
+        return;
+    }
+
+    if (!m_network.isConnected())
+    {
+        showError(QStringLiteral("Сначала подключитесь к сопернику."));
+        return;
+    }
+
+    if (!m_game.attackRemoteMinion(m_localBoardList->currentRow(), m_remoteBoardList->currentRow(), &error, &log))
+    {
+        showError(error);
+        return;
+    }
+
+    appendLog(QStringLiteral("========== ВАША АТАКА =========="));
+    appendBattleLog(log);
+
+    QJsonObject object;
+    object.insert(QStringLiteral("type"), QStringLiteral("attackMinion"));
+    object.insert(QStringLiteral("attackerIndex"), m_localBoardList->currentRow());
+    object.insert(QStringLiteral("targetIndex"), m_remoteBoardList->currentRow());
+    m_network.sendMessage(object);
+
+    applyGameOverStatus();
+    updateUi();
+    syncLocalState();
+}
+
+void MainWindow::attackEnemyHero()
+{
+    QString error;
+    QStringList log;
+
+    if (isSelfPlayMode())
+    {
+        if (!m_selfPlayActive)
+        {
+            showError(QStringLiteral("Сначала начните локальную игру."));
+            return;
+        }
+
+        if (!m_game.attackHero(currentSelfPlayer(),
+                               otherSelfPlayer(),
+                               m_localBoardList->currentRow(),
+                               &error,
+                               &log))
+        {
+            showError(error);
+            return;
+        }
+
+        appendLog(QStringLiteral("========== АТАКА ГЕРОЯ =========="));
+        appendBattleLog(log);
+        applyGameOverStatus();
+        updateUi();
+        return;
+    }
+
+    if (!m_network.isConnected())
+    {
+        showError(QStringLiteral("Сначала подключитесь к сопернику."));
+        return;
+    }
+
+    if (!m_game.attackRemoteHero(m_localBoardList->currentRow(), &error, &log))
+    {
+        showError(error);
+        return;
+    }
+
+    appendLog(QStringLiteral("========== АТАКА ГЕРОЯ =========="));
+    appendBattleLog(log);
+
+    QJsonObject object;
+    object.insert(QStringLiteral("type"), QStringLiteral("attackHero"));
+    object.insert(QStringLiteral("attackerIndex"), m_localBoardList->currentRow());
+    m_network.sendMessage(object);
+
+    applyGameOverStatus();
+    updateUi();
+    syncLocalState();
+}
+
+void MainWindow::applyPlayerNames()
+{
+    const QString firstName = m_localNameEdit->text().trimmed().isEmpty()
+        ? QStringLiteral("Игрок 1")
+        : m_localNameEdit->text().trimmed();
+    const QString secondName = m_secondNameEdit->text().trimmed().isEmpty()
+        ? QStringLiteral("Игрок 2")
+        : m_secondNameEdit->text().trimmed();
+
+    if (isSelfPlayMode())
+    {
+        m_game.setHeroName(m_selfPlayers[0], firstName);
+        m_game.setHeroName(m_selfPlayers[1], secondName);
+        appendLog(QStringLiteral("Имена локальных игроков обновлены: %1 и %2.").arg(firstName, secondName));
+        updateUi();
+        return;
+    }
+
+    m_game.setHeroName(m_game.localPlayer(), firstName);
+    m_game.setRemoteHeroName(secondName);
+    appendLog(QStringLiteral("Имя вашего героя установлено: %1.").arg(firstName));
+
+    if (m_network.isConnected())
+    {
+        syncLocalState();
+    }
+
+    updateUi();
+}
+
 void MainWindow::toggleReady()
 {
     if (isSelfPlayMode())
@@ -306,13 +455,63 @@ void MainWindow::toggleReady()
     resolveBattleIfHost();
 }
 
+void MainWindow::applyGameOverStatus()
+{
+    if (isSelfPlayMode())
+    {
+        if (!m_selfPlayActive)
+        {
+            return;
+        }
+
+        const AutoBattlerGame::PlayerState &first = m_selfPlayers[0];
+        const AutoBattlerGame::PlayerState &second = m_selfPlayers[1];
+
+        if (first.hero.health <= 0 && second.hero.health <= 0)
+        {
+            m_statusLabel->setText(QStringLiteral("Оба игрока довели друг друга до 0 здоровья. Ничья."));
+        }
+        else if (first.hero.health <= 0)
+        {
+            m_statusLabel->setText(QStringLiteral("%1 победил: здоровье %2 опустилось до 0.")
+                                       .arg(second.hero.name, first.hero.name));
+        }
+        else if (second.hero.health <= 0)
+        {
+            m_statusLabel->setText(QStringLiteral("%1 победил: здоровье %2 опустилось до 0.")
+                                       .arg(first.hero.name, second.hero.name));
+        }
+
+        return;
+    }
+
+    const AutoBattlerGame::PlayerState &local = m_game.localPlayer();
+    const AutoBattlerGame::PlayerSnapshot &remote = m_game.remotePlayer();
+
+    if (local.hero.health <= 0 && remote.heroHealth <= 0)
+    {
+        m_statusLabel->setText(QStringLiteral("Оба героя пали. Ничья."));
+    }
+    else if (local.hero.health <= 0)
+    {
+        m_statusLabel->setText(QStringLiteral("Поражение: здоровье вашего героя опустилось до 0."));
+    }
+    else if (remote.heroHealth <= 0)
+    {
+        m_statusLabel->setText(QStringLiteral("Победа: здоровье героя соперника опустилось до 0."));
+    }
+}
+
 void MainWindow::onConnected()
 {
-    const QString heroName = m_network.isHosting()
-        ? QStringLiteral("Хозяин таверны")
-        : QStringLiteral("Искатель славы");
+    const QString heroName = m_localNameEdit->text().trimmed().isEmpty()
+        ? (m_network.isHosting() ? QStringLiteral("Хозяин таверны") : QStringLiteral("Искатель славы"))
+        : m_localNameEdit->text().trimmed();
+    const QString opponentName = m_secondNameEdit->text().trimmed().isEmpty()
+        ? QStringLiteral("Соперник")
+        : m_secondNameEdit->text().trimmed();
 
-    m_game.resetMatch(heroName, QStringLiteral("Соперник"));
+    m_game.resetMatch(heroName, opponentName);
     m_battleLog->clear();
     appendLog(QStringLiteral("Соединение установлено. Раунд 1 начинается с 3 монет."));
     updateUi();
@@ -345,6 +544,59 @@ void MainWindow::onNetworkMessage(const QJsonObject &object)
         const AutoBattlerGame::BattleResult result =
             AutoBattlerGame::battleResultFromJson(object.value(QStringLiteral("payload")).toObject());
         applyBattleResult(result);
+        return;
+    }
+
+    if (type == QLatin1String("attackMinion"))
+    {
+        AutoBattlerGame::PlayerState remoteState;
+        remoteState.hero.name = m_game.remotePlayer().heroName;
+        remoteState.hero.health = m_game.remotePlayer().heroHealth;
+        remoteState.round = m_game.remotePlayer().round;
+        remoteState.ready = m_game.remotePlayer().ready;
+        remoteState.board = m_game.remotePlayer().board;
+
+        QStringList log;
+        if (m_game.attackMinion(remoteState,
+                                m_game.localPlayer(),
+                                object.value(QStringLiteral("attackerIndex")).toInt(-1),
+                                object.value(QStringLiteral("targetIndex")).toInt(-1),
+                                nullptr,
+                                &log))
+        {
+            m_game.setRemotePlayer(m_game.makeSnapshot(remoteState));
+            appendLog(QStringLiteral("========== АТАКА СОПЕРНИКА =========="));
+            appendBattleLog(log);
+            applyGameOverStatus();
+            updateUi();
+            syncLocalState();
+        }
+        return;
+    }
+
+    if (type == QLatin1String("attackHero"))
+    {
+        AutoBattlerGame::PlayerState remoteState;
+        remoteState.hero.name = m_game.remotePlayer().heroName;
+        remoteState.hero.health = m_game.remotePlayer().heroHealth;
+        remoteState.round = m_game.remotePlayer().round;
+        remoteState.ready = m_game.remotePlayer().ready;
+        remoteState.board = m_game.remotePlayer().board;
+
+        QStringList log;
+        if (m_game.attackHero(remoteState,
+                              m_game.localPlayer(),
+                              object.value(QStringLiteral("attackerIndex")).toInt(-1),
+                              nullptr,
+                              &log))
+        {
+            m_game.setRemotePlayer(m_game.makeSnapshot(remoteState));
+            appendLog(QStringLiteral("========== АТАКА СОПЕРНИКА ПО ГЕРОЮ =========="));
+            appendBattleLog(log);
+            applyGameOverStatus();
+            updateUi();
+            syncLocalState();
+        }
     }
 }
 
@@ -401,6 +653,8 @@ void MainWindow::setupUi()
         m_transportBox->addItem(QStringLiteral("Bluetooth"), static_cast<int>(UiTransport::Bluetooth));
     }
 
+    m_localNameEdit = new QLineEdit(QStringLiteral("Игрок 1"), networkBox);
+    m_secondNameEdit = new QLineEdit(QStringLiteral("Игрок 2"), networkBox);
     m_addressEdit = new QLineEdit(QStringLiteral("127.0.0.1"), networkBox);
     m_portSpin = new QSpinBox(networkBox);
     m_portSpin->setRange(1024, 65535);
@@ -408,10 +662,14 @@ void MainWindow::setupUi()
     m_hostButton = new QPushButton(QStringLiteral("Создать комнату"), networkBox);
     m_connectButton = new QPushButton(QStringLiteral("Подключиться"), networkBox);
     m_localGameButton = new QPushButton(QStringLiteral("Начать локальную игру"), networkBox);
+    m_applyNamesButton = new QPushButton(QStringLiteral("Применить имена"), networkBox);
     m_connectionLabel = new QLabel(QStringLiteral("Нет подключения"), networkBox);
     m_connectionLabel->setWordWrap(true);
 
     networkLayout->addRow(QStringLiteral("Режим"), m_modeBox);
+    networkLayout->addRow(QStringLiteral("Игрок 1"), m_localNameEdit);
+    networkLayout->addRow(QStringLiteral("Игрок 2 / соперник"), m_secondNameEdit);
+    networkLayout->addRow(m_applyNamesButton);
     networkLayout->addRow(QStringLiteral("Транспорт"), m_transportBox);
     networkLayout->addRow(QStringLiteral("Адрес"), m_addressEdit);
     networkLayout->addRow(QStringLiteral("Порт"), m_portSpin);
@@ -447,6 +705,8 @@ void MainWindow::setupUi()
     m_buyButton = new QPushButton(QStringLiteral("Купить в руку"), actionsBox);
     m_playButton = new QPushButton(QStringLiteral("Выставить на стол"), actionsBox);
     m_sellButton = new QPushButton(QStringLiteral("Продать со стола (+1)"), actionsBox);
+    m_attackMinionButton = new QPushButton(QStringLiteral("Атаковать существо"), actionsBox);
+    m_attackHeroButton = new QPushButton(QStringLiteral("Атаковать героя"), actionsBox);
     m_readyButton = new QPushButton(QStringLiteral("Готов к бою"), actionsBox);
     m_switchPlayerButton = new QPushButton(QStringLiteral("Передать управление"), actionsBox);
     m_revealTurnButton = new QPushButton(QStringLiteral("Показать ход"), actionsBox);
@@ -455,6 +715,8 @@ void MainWindow::setupUi()
     actionsLayout->addWidget(m_buyButton);
     actionsLayout->addWidget(m_playButton);
     actionsLayout->addWidget(m_sellButton);
+    actionsLayout->addWidget(m_attackMinionButton);
+    actionsLayout->addWidget(m_attackHeroButton);
     actionsLayout->addWidget(m_readyButton);
     actionsLayout->addWidget(m_switchPlayerButton);
     actionsLayout->addWidget(m_revealTurnButton);
@@ -683,18 +945,34 @@ void MainWindow::setupUi()
     connect(m_hostButton, &QPushButton::clicked, this, &MainWindow::hostSession);
     connect(m_connectButton, &QPushButton::clicked, this, &MainWindow::connectToSession);
     connect(m_localGameButton, &QPushButton::clicked, this, &MainWindow::startSelfGame);
+    connect(m_applyNamesButton, &QPushButton::clicked, this, &MainWindow::applyPlayerNames);
     connect(m_refreshButton, &QPushButton::clicked, this, &MainWindow::refreshTavern);
     connect(m_buyButton, &QPushButton::clicked, this, &MainWindow::buySelectedCard);
     connect(m_playButton, &QPushButton::clicked, this, &MainWindow::playSelectedCard);
     connect(m_sellButton, &QPushButton::clicked, this, &MainWindow::sellSelectedMinion);
+    connect(m_attackMinionButton, &QPushButton::clicked, this, &MainWindow::attackSelectedMinion);
+    connect(m_attackHeroButton, &QPushButton::clicked, this, &MainWindow::attackEnemyHero);
     connect(m_readyButton, &QPushButton::clicked, this, &MainWindow::toggleReady);
     connect(m_switchPlayerButton, &QPushButton::clicked, this, &MainWindow::switchSelfPlayer);
     connect(m_revealTurnButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
     connect(m_privacyRevealButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
+    connect(m_tavernList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
+    connect(m_handList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
+    connect(m_localBoardList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
+    connect(m_remoteBoardList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
 }
 
 void MainWindow::updateUi()
 {
+    const QSignalBlocker tavernBlocker(m_tavernList);
+    const QSignalBlocker handBlocker(m_handList);
+    const QSignalBlocker localBoardBlocker(m_localBoardList);
+    const QSignalBlocker remoteBoardBlocker(m_remoteBoardList);
+    const int tavernRow = m_tavernList->currentRow();
+    const int handRow = m_handList->currentRow();
+    const int localBoardRow = m_localBoardList->currentRow();
+    const int remoteBoardRow = m_remoteBoardList->currentRow();
+
     const bool selfPlay = isSelfPlayMode();
 
     QString connectionText = QStringLiteral("Нет подключения");
@@ -824,6 +1102,45 @@ void MainWindow::updateUi()
         }
     }
 
+    if (selfPlay && m_selfPlayActive && gameOver)
+    {
+        const AutoBattlerGame::PlayerState &first = m_selfPlayers[0];
+        const AutoBattlerGame::PlayerState &second = m_selfPlayers[1];
+
+        if (first.hero.health <= 0 && second.hero.health <= 0)
+        {
+            statusText = QStringLiteral("Оба игрока довели друг друга до 0 здоровья. Ничья.");
+        }
+        else if (first.hero.health <= 0)
+        {
+            statusText = QStringLiteral("%1 победил: здоровье %2 опустилось до 0.")
+                             .arg(second.hero.name, first.hero.name);
+        }
+        else if (second.hero.health <= 0)
+        {
+            statusText = QStringLiteral("%1 победил: здоровье %2 опустилось до 0.")
+                             .arg(first.hero.name, second.hero.name);
+        }
+    }
+    else if (!selfPlay && gameOver)
+    {
+        const AutoBattlerGame::PlayerState &local = m_game.localPlayer();
+        const AutoBattlerGame::PlayerSnapshot &remote = m_game.remotePlayer();
+
+        if (local.hero.health <= 0 && remote.heroHealth <= 0)
+        {
+            statusText = QStringLiteral("Оба героя пали. Ничья.");
+        }
+        else if (local.hero.health <= 0)
+        {
+            statusText = QStringLiteral("Поражение: здоровье вашего героя опустилось до 0.");
+        }
+        else if (remote.heroHealth <= 0)
+        {
+            statusText = QStringLiteral("Победа: здоровье героя соперника опустилось до 0.");
+        }
+    }
+
     m_connectionLabel->setText(connectionText);
     m_activePlayerLabel->setText(activePlayerText);
     m_roundLabel->setText(roundText);
@@ -832,12 +1149,31 @@ void MainWindow::updateUi()
     m_remoteHeroLabel->setText(opponentHeroText);
     m_statusLabel->setText(statusText);
 
+    if (tavernRow >= 0 && tavernRow < m_tavernList->count())
+    {
+        m_tavernList->setCurrentRow(tavernRow);
+    }
+    if (handRow >= 0 && handRow < m_handList->count())
+    {
+        m_handList->setCurrentRow(handRow);
+    }
+    if (localBoardRow >= 0 && localBoardRow < m_localBoardList->count())
+    {
+        m_localBoardList->setCurrentRow(localBoardRow);
+    }
+    if (remoteBoardRow >= 0 && remoteBoardRow < m_remoteBoardList->count())
+    {
+        m_remoteBoardList->setCurrentRow(remoteBoardRow);
+    }
+
     updateTransportUi();
 
     m_refreshButton->setEnabled(buyPhase);
     m_buyButton->setEnabled(buyPhase && m_tavernList->count() > 0);
     m_playButton->setEnabled(buyPhase && m_handList->count() > 0);
     m_sellButton->setEnabled(buyPhase && m_localBoardList->count() > 0);
+    m_attackMinionButton->setEnabled(buyPhase && m_localBoardList->currentRow() >= 0 && m_remoteBoardList->currentRow() >= 0);
+    m_attackHeroButton->setEnabled(buyPhase && m_localBoardList->currentRow() >= 0);
 
     if (selfPlay)
     {

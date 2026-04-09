@@ -17,6 +17,7 @@ public:
         int health = 0;
         int cost = 3;
         bool taunt = false;
+        bool hasAttacked = false;
     };
 
     struct HeroState
@@ -63,6 +64,7 @@ public:
     void beginNextRound();
     void resetPlayer(PlayerState &player, const QString &heroName);
     void beginNextRound(PlayerState &player);
+    void setHeroName(PlayerState &player, const QString &heroName);
 
     bool refreshTavern(QString *errorMessage = nullptr);
     bool refreshTavern(PlayerState &player, QString *errorMessage = nullptr);
@@ -82,6 +84,26 @@ public:
     void setRemoteReady(bool ready);
     void setLocalHeroHealth(int health);
     void setRemoteHeroHealth(int health);
+    void setRemoteHeroName(const QString &heroName);
+
+    bool attackMinion(PlayerState &attacker,
+                      PlayerState &defender,
+                      int attackerIndex,
+                      int targetIndex,
+                      QString *errorMessage = nullptr,
+                      QStringList *log = nullptr);
+    bool attackHero(PlayerState &attacker,
+                    PlayerState &defender,
+                    int attackerIndex,
+                    QString *errorMessage = nullptr,
+                    QStringList *log = nullptr);
+    bool attackRemoteMinion(int attackerIndex,
+                            int targetIndex,
+                            QString *errorMessage = nullptr,
+                            QStringList *log = nullptr);
+    bool attackRemoteHero(int attackerIndex,
+                          QString *errorMessage = nullptr,
+                          QStringList *log = nullptr);
 
     PlayerSnapshot makeLocalSnapshot() const;
     PlayerSnapshot makeSnapshot(const PlayerState &player) const;

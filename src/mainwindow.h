@@ -35,7 +35,10 @@ private slots:
     void buySelectedCard();
     void playSelectedCard();
     void sellSelectedMinion();
+    void attackSelectedMinion();
+    void attackEnemyHero();
     void toggleReady();
+    void applyPlayerNames();
     void onConnected();
     void onDisconnected();
     void onNetworkMessage(const QJsonObject &object);
@@ -65,6 +68,7 @@ private:
     void resolveSelfBattleIfReady();
     void applyBattleResult(const AutoBattlerGame::BattleResult &result);
     void applySelfBattleResult(const AutoBattlerGame::BattleResult &result);
+    void applyGameOverStatus();
     UiTransport selectedTransport() const;
     SessionMode selectedMode() const;
     bool isSelfPlayMode() const;
@@ -79,11 +83,14 @@ private:
 
     QComboBox *m_modeBox = nullptr;
     QComboBox *m_transportBox = nullptr;
+    QLineEdit *m_localNameEdit = nullptr;
+    QLineEdit *m_secondNameEdit = nullptr;
     QLineEdit *m_addressEdit = nullptr;
     QSpinBox *m_portSpin = nullptr;
     QPushButton *m_hostButton = nullptr;
     QPushButton *m_connectButton = nullptr;
     QPushButton *m_localGameButton = nullptr;
+    QPushButton *m_applyNamesButton = nullptr;
     QPushButton *m_switchPlayerButton = nullptr;
     QPushButton *m_revealTurnButton = nullptr;
     QWidget *m_privacyOverlay = nullptr;
@@ -106,6 +113,8 @@ private:
     QPushButton *m_buyButton = nullptr;
     QPushButton *m_playButton = nullptr;
     QPushButton *m_sellButton = nullptr;
+    QPushButton *m_attackMinionButton = nullptr;
+    QPushButton *m_attackHeroButton = nullptr;
     QPushButton *m_readyButton = nullptr;
 
     bool m_selfPlayActive = false;
