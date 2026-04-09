@@ -1,14 +1,21 @@
 #include "mainwindow.h"
 
+#include <QGuiApplication>
 #include <QFont>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonObject>
 #include <QResizeEvent>
+#include <QScreen>
+#include <QShortcut>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -630,16 +637,69 @@ void MainWindow::updateTransportUi()
 void MainWindow::setupUi()
 {
     auto *central = new QWidget(this);
-    auto *rootLayout = new QHBoxLayout(central);
-    rootLayout->setContentsMargins(22, 22, 22, 22);
-    rootLayout->setSpacing(18);
+    auto *rootLayout = new QVBoxLayout(central);
+    rootLayout->setContentsMargins(20, 18, 20, 20);
+    rootLayout->setSpacing(16);
 
-    auto *leftColumn = new QVBoxLayout();
-    auto *rightColumn = new QVBoxLayout();
+    auto *headerPanel = new QWidget(central);
+    headerPanel->setObjectName(QStringLiteral("headerPanel"));
+    auto *headerLayout = new QHBoxLayout(headerPanel);
+    headerLayout->setContentsMargins(24, 18, 24, 18);
+    headerLayout->setSpacing(18);
+
+    auto *headerTextLayout = new QVBoxLayout();
+    headerTextLayout->setSpacing(4);
+
+    auto *headerTitle = new QLabel(QStringLiteral("Qt Battlegrounds"), headerPanel);
+    headerTitle->setObjectName(QStringLiteral("headerTitle"));
+    auto *headerSubtitle = new QLabel(
+        QStringLiteral("Таверна, герои, ручные атаки и сетевые матчи в более широком и удобном интерфейсе."),
+        headerPanel);
+    headerSubtitle->setObjectName(QStringLiteral("headerSubtitle"));
+    headerSubtitle->setWordWrap(true);
+
+    headerTextLayout->addWidget(headerTitle);
+    headerTextLayout->addWidget(headerSubtitle);
+
+    auto *headerActionsLayout = new QVBoxLayout();
+    headerActionsLayout->setSpacing(8);
+
+    auto *fullscreenHintLabel = new QLabel(QStringLiteral("F11 - полноэкранный режим, Esc - выход"), headerPanel);
+    fullscreenHintLabel->setObjectName(QStringLiteral("fullscreenHintLabel"));
+    fullscreenHintLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+    auto *fullscreenButton = new QPushButton(QStringLiteral("Полный экран"), headerPanel);
+    fullscreenButton->setObjectName(QStringLiteral("fullscreenButton"));
+    fullscreenButton->setMinimumWidth(190);
+
+    headerActionsLayout->addWidget(fullscreenHintLabel);
+    headerActionsLayout->addWidget(fullscreenButton, 0, Qt::AlignRight);
+
+    headerLayout->addLayout(headerTextLayout, 1);
+    headerLayout->addLayout(headerActionsLayout, 0);
+
+    auto *contentSplitter = new QSplitter(Qt::Horizontal, central);
+    contentSplitter->setChildrenCollapsible(false);
+    contentSplitter->setHandleWidth(10);
+    contentSplitter->setObjectName(QStringLiteral("contentSplitter"));
+
+    auto *sidebarWidget = new QWidget(contentSplitter);
+    sidebarWidget->setObjectName(QStringLiteral("sidebarWidget"));
+    sidebarWidget->setMinimumWidth(320);
+    sidebarWidget->setMaximumWidth(430);
+    auto *leftColumn = new QVBoxLayout(sidebarWidget);
+    leftColumn->setContentsMargins(0, 0, 0, 0);
     leftColumn->setSpacing(16);
-    rightColumn->setSpacing(16);
+
+    auto *dashboardWidget = new QWidget(contentSplitter);
+    dashboardWidget->setObjectName(QStringLiteral("dashboardWidget"));
+    auto *dashboardLayout = new QGridLayout(dashboardWidget);
+    dashboardLayout->setContentsMargins(0, 0, 0, 0);
+    dashboardLayout->setHorizontalSpacing(16);
+    dashboardLayout->setVerticalSpacing(16);
 
     auto *networkBox = new QGroupBox(QStringLiteral("Режим и сеть"), this);
+    networkBox->setObjectName(QStringLiteral("networkBox"));
     auto *networkLayout = new QFormLayout(networkBox);
 
     m_modeBox = new QComboBox(networkBox);
@@ -679,6 +739,7 @@ void MainWindow::setupUi()
     networkLayout->addRow(QStringLiteral("Статус"), m_connectionLabel);
 
     auto *stateBox = new QGroupBox(QStringLiteral("Состояние матча"), this);
+    stateBox->setObjectName(QStringLiteral("stateBox"));
     auto *stateLayout = new QFormLayout(stateBox);
     m_activePlayerLabel = new QLabel(stateBox);
     m_roundLabel = new QLabel(stateBox);
@@ -700,7 +761,9 @@ void MainWindow::setupUi()
     stateLayout->addRow(QStringLiteral("Подсказка"), m_statusLabel);
 
     auto *actionsBox = new QGroupBox(QStringLiteral("Действия"), this);
+    actionsBox->setObjectName(QStringLiteral("actionsBox"));
     auto *actionsLayout = new QVBoxLayout(actionsBox);
+    actionsLayout->setSpacing(10);
     m_refreshButton = new QPushButton(QStringLiteral("Обновить таверну (-1)"), actionsBox);
     m_buyButton = new QPushButton(QStringLiteral("Купить в руку"), actionsBox);
     m_playButton = new QPushButton(QStringLiteral("Выставить на стол"), actionsBox);
@@ -722,26 +785,38 @@ void MainWindow::setupUi()
     actionsLayout->addWidget(m_revealTurnButton);
 
     auto *tavernBox = new QGroupBox(QStringLiteral("Таверна"), this);
+    tavernBox->setObjectName(QStringLiteral("tavernBox"));
     auto *tavernLayout = new QVBoxLayout(tavernBox);
     m_tavernList = new QListWidget(tavernBox);
+    m_tavernList->setObjectName(QStringLiteral("tavernList"));
     m_tavernList->setAlternatingRowColors(true);
+    m_tavernList->setSpacing(4);
     tavernLayout->addWidget(m_tavernList);
 
     auto *handBox = new QGroupBox(QStringLiteral("Рука"), this);
+    handBox->setObjectName(QStringLiteral("handBox"));
     auto *handLayout = new QVBoxLayout(handBox);
     m_handList = new QListWidget(handBox);
+    m_handList->setObjectName(QStringLiteral("handList"));
     m_handList->setAlternatingRowColors(true);
+    m_handList->setSpacing(4);
     handLayout->addWidget(m_handList);
 
     auto *boardsBox = new QGroupBox(QStringLiteral("Стол"), this);
+    boardsBox->setObjectName(QStringLiteral("boardsBox"));
     auto *boardsLayout = new QHBoxLayout(boardsBox);
+    boardsLayout->setSpacing(14);
     auto *localBoardLayout = new QVBoxLayout();
     auto *remoteBoardLayout = new QVBoxLayout();
 
     m_localBoardList = new QListWidget(boardsBox);
     m_remoteBoardList = new QListWidget(boardsBox);
+    m_localBoardList->setObjectName(QStringLiteral("localBoardList"));
+    m_remoteBoardList->setObjectName(QStringLiteral("remoteBoardList"));
     m_localBoardList->setAlternatingRowColors(true);
     m_remoteBoardList->setAlternatingRowColors(true);
+    m_localBoardList->setSpacing(4);
+    m_remoteBoardList->setSpacing(4);
 
     localBoardLayout->addWidget(new QLabel(QStringLiteral("Текущий стол"), boardsBox));
     localBoardLayout->addWidget(m_localBoardList);
@@ -752,8 +827,10 @@ void MainWindow::setupUi()
     boardsLayout->addLayout(remoteBoardLayout);
 
     auto *battleBox = new QGroupBox(QStringLiteral("Журнал боя"), this);
+    battleBox->setObjectName(QStringLiteral("battleBox"));
     auto *battleLayout = new QVBoxLayout(battleBox);
     m_battleLog = new QTextEdit(battleBox);
+    m_battleLog->setObjectName(QStringLiteral("battleLog"));
     m_battleLog->setReadOnly(true);
     battleLayout->addWidget(m_battleLog);
 
@@ -762,106 +839,166 @@ void MainWindow::setupUi()
     leftColumn->addWidget(actionsBox);
     leftColumn->addStretch();
 
-    rightColumn->addWidget(tavernBox);
-    rightColumn->addWidget(handBox);
-    rightColumn->addWidget(boardsBox);
-    rightColumn->addWidget(battleBox, 1);
+    dashboardLayout->addWidget(tavernBox, 0, 0);
+    dashboardLayout->addWidget(handBox, 0, 1);
+    dashboardLayout->addWidget(boardsBox, 1, 0, 1, 2);
+    dashboardLayout->addWidget(battleBox, 2, 0, 1, 2);
+    dashboardLayout->setColumnStretch(0, 3);
+    dashboardLayout->setColumnStretch(1, 2);
+    dashboardLayout->setRowStretch(0, 3);
+    dashboardLayout->setRowStretch(1, 4);
+    dashboardLayout->setRowStretch(2, 3);
 
-    rootLayout->addLayout(leftColumn, 0);
-    rootLayout->addLayout(rightColumn, 1);
+    contentSplitter->addWidget(sidebarWidget);
+    contentSplitter->addWidget(dashboardWidget);
+    contentSplitter->setStretchFactor(0, 0);
+    contentSplitter->setStretchFactor(1, 1);
+    contentSplitter->setSizes({360, 1120});
+
+    rootLayout->addWidget(headerPanel);
+    rootLayout->addWidget(contentSplitter, 1);
 
     setCentralWidget(central);
     setWindowTitle(QStringLiteral("Qt Battlegrounds"));
-    resize(1240, 760);
+    setMinimumSize(1100, 700);
+    const QRect available = QGuiApplication::primaryScreen() != nullptr
+        ? QGuiApplication::primaryScreen()->availableGeometry()
+        : QRect(0, 0, 1600, 900);
+    const int targetWidth = std::max(1100, static_cast<int>(available.width() * 0.95));
+    const int targetHeight = std::max(700, static_cast<int>(available.height() * 0.92));
+    resize(std::min(targetWidth, available.width()), std::min(targetHeight, available.height()));
     setFont(QFont(QStringLiteral("Segoe UI"), 10));
 
     setStyleSheet(QStringLiteral(
         "QMainWindow {"
-        "  background-color: #1a120d;"
-        "  background-image: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-        "      stop:0 #2c1d12, stop:0.35 #3f2919, stop:0.7 #1e140d, stop:1 #120c08);"
-        "  color: #f7e4bf;"
+        "  background-color: #120b08;"
+        "  background-image: qradialgradient(cx:0.5, cy:0.18, radius:1.0,"
+        "      fx:0.5, fy:0.18,"
+        "      stop:0 #533119, stop:0.28 #2d190f, stop:0.65 #180f0b, stop:1 #0d0705);"
+        "  color: #f6e4c0;"
         "}"
         "QWidget {"
-        "  color: #f6e2bb;"
+        "  color: #f6e3bc;"
         "  font-size: 10pt;"
         "}"
+        "QWidget#headerPanel {"
+        "  background-color: rgba(63, 33, 14, 228);"
+        "  border: 2px solid rgba(214, 163, 83, 210);"
+        "  border-radius: 22px;"
+        "}"
+        "QLabel#headerTitle {"
+        "  color: #ffe7ac;"
+        "  font: 700 22pt 'Georgia';"
+        "}"
+        "QLabel#headerSubtitle {"
+        "  color: rgba(255, 241, 210, 210);"
+        "  font: 11pt 'Trebuchet MS';"
+        "}"
+        "QLabel#fullscreenHintLabel {"
+        "  color: rgba(255, 231, 188, 180);"
+        "  font: 9.5pt 'Segoe UI';"
+        "}"
+        "QSplitter::handle {"
+        "  background: transparent;"
+        "}"
         "QGroupBox {"
-        "  background-color: rgba(37, 23, 15, 208);"
-        "  border: 2px solid rgba(173, 122, 58, 190);"
-        "  border-radius: 16px;"
-        "  margin-top: 16px;"
-        "  padding: 18px 14px 14px 14px;"
+        "  background-color: rgba(34, 20, 12, 220);"
+        "  border: 2px solid rgba(179, 127, 63, 195);"
+        "  border-radius: 18px;"
+        "  margin-top: 18px;"
+        "  padding: 20px 16px 16px 16px;"
         "}"
         "QGroupBox::title {"
         "  subcontrol-origin: margin;"
-        "  left: 14px;"
-        "  padding: 2px 10px;"
-        "  color: #ffd78d;"
-        "  background-color: rgba(93, 58, 24, 220);"
-        "  border: 1px solid rgba(221, 173, 91, 170);"
-        "  border-radius: 9px;"
+        "  left: 16px;"
+        "  padding: 3px 11px;"
+        "  color: #ffdc93;"
+        "  background-color: rgba(92, 54, 24, 236);"
+        "  border: 1px solid rgba(234, 191, 110, 175);"
+        "  border-radius: 10px;"
         "  font: bold 11pt 'Georgia';"
         "}"
+        "QGroupBox#networkBox, QGroupBox#stateBox, QGroupBox#actionsBox {"
+        "  background-color: rgba(41, 24, 15, 228);"
+        "}"
+        "QGroupBox#tavernBox, QGroupBox#handBox, QGroupBox#boardsBox, QGroupBox#battleBox {"
+        "  background-color: rgba(29, 18, 11, 236);"
+        "}"
         "QLabel {"
-        "  color: #f3e0bf;"
+        "  color: #f8e6c5;"
         "}"
         "QLineEdit, QSpinBox, QComboBox, QListWidget, QTextEdit {"
-        "  background-color: rgba(244, 227, 193, 232);"
-        "  color: #2b190d;"
-        "  border: 2px solid rgba(143, 101, 45, 180);"
-        "  border-radius: 12px;"
-        "  padding: 6px 8px;"
-        "  selection-background-color: #7c3f17;"
-        "  selection-color: #fff3d6;"
+        "  background-color: rgba(245, 230, 200, 240);"
+        "  color: #2b180c;"
+        "  border: 2px solid rgba(157, 109, 50, 195);"
+        "  border-radius: 14px;"
+        "  padding: 7px 10px;"
+        "  selection-background-color: #8d4318;"
+        "  selection-color: #fff2d4;"
+        "}"
+        "QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QListWidget:focus, QTextEdit:focus {"
+        "  border-color: rgba(255, 200, 102, 220);"
         "}"
         "QComboBox::drop-down {"
         "  border: none;"
-        "  width: 22px;"
+        "  width: 24px;"
         "}"
-        "QListWidget::item, QTextEdit {"
-        "  padding: 6px;"
+        "QListWidget#tavernList, QListWidget#handList, QListWidget#localBoardList, QListWidget#remoteBoardList {"
+        "  font: 600 10pt 'Trebuchet MS';"
+        "}"
+        "QTextEdit#battleLog {"
+        "  font: 10pt 'Consolas';"
+        "  background-color: rgba(253, 240, 215, 242);"
+        "}"
+        "QListWidget::item {"
+        "  margin: 3px 0;"
+        "  padding: 10px 12px;"
+        "  border-radius: 11px;"
         "}"
         "QListWidget::item:alternate {"
-        "  background-color: rgba(124, 90, 48, 28);"
+        "  background-color: rgba(135, 96, 56, 34);"
         "}"
         "QListWidget::item:selected {"
-        "  background-color: rgba(127, 63, 24, 215);"
-        "  color: #fff2d5;"
+        "  background-color: rgba(128, 59, 20, 220);"
+        "  color: #fff3d8;"
+        "  border: 1px solid rgba(255, 214, 142, 160);"
         "}"
         "QPushButton {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "      stop:0 #f5c768, stop:0.52 #c8842e, stop:1 #8b5617);"
-        "  color: #291407;"
-        "  border: 2px solid #f1dfab;"
-        "  border-radius: 14px;"
-        "  padding: 9px 14px;"
+        "      stop:0 #ffd886, stop:0.45 #d79739, stop:1 #8a4f16);"
+        "  color: #281208;"
+        "  border: 2px solid rgba(255, 232, 180, 210);"
+        "  border-radius: 15px;"
+        "  padding: 10px 16px;"
         "  font: bold 10pt 'Segoe UI';"
+        "}"
+        "QPushButton#fullscreenButton {"
+        "  min-height: 40px;"
         "}"
         "QPushButton:hover {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "      stop:0 #ffdb84, stop:0.55 #df9e3e, stop:1 #9e6220);"
+        "      stop:0 #ffe39a, stop:0.5 #ebb152, stop:1 #9f5d1f);"
         "}"
         "QPushButton:pressed {"
-        "  padding-top: 11px;"
-        "  padding-bottom: 7px;"
+        "  padding-top: 12px;"
+        "  padding-bottom: 8px;"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "      stop:0 #bb7b27, stop:1 #6f430f);"
+        "      stop:0 #bc7b27, stop:1 #6e420f);"
         "}"
         "QPushButton:disabled {"
-        "  background-color: rgba(104, 82, 53, 170);"
-        "  color: rgba(255, 240, 214, 120);"
-        "  border-color: rgba(220, 207, 176, 90);"
+        "  background-color: rgba(95, 75, 50, 170);"
+        "  color: rgba(255, 241, 216, 118);"
+        "  border-color: rgba(230, 213, 178, 85);"
         "}"
         "QScrollBar:vertical {"
-        "  background: rgba(54, 33, 20, 180);"
+        "  background: rgba(56, 33, 20, 160);"
         "  width: 12px;"
         "  margin: 10px 0 10px 0;"
         "  border-radius: 6px;"
         "}"
         "QScrollBar::handle:vertical {"
-        "  background: rgba(226, 181, 97, 180);"
-        "  min-height: 24px;"
+        "  background: rgba(231, 183, 94, 190);"
+        "  min-height: 28px;"
         "  border-radius: 6px;"
         "}"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
@@ -871,11 +1008,12 @@ void MainWindow::setupUi()
     ));
 
     const QString heroPanelStyle = QStringLiteral(
-        "padding: 8px 10px;"
-        "background-color: rgba(92, 56, 24, 170);"
-        "border: 1px solid rgba(246, 214, 150, 130);"
-        "border-radius: 12px;"
-        "color: #fff0cf;");
+        "padding: 10px 12px;"
+        "background-color: rgba(97, 57, 25, 178);"
+        "border: 1px solid rgba(250, 215, 150, 140);"
+        "border-radius: 14px;"
+        "color: #fff1cf;"
+        "font: 600 10pt 'Trebuchet MS';");
     m_connectionLabel->setStyleSheet(heroPanelStyle);
     m_statusLabel->setStyleSheet(heroPanelStyle);
     m_localHeroLabel->setStyleSheet(heroPanelStyle);
@@ -931,6 +1069,24 @@ void MainWindow::setupUi()
     m_privacyOverlay->hide();
     m_revealTurnButton->hide();
 
+    const auto updateFullscreenButton = [this, fullscreenButton]() {
+        fullscreenButton->setText(isFullScreen()
+                                      ? QStringLiteral("Выйти из полного экрана")
+                                      : QStringLiteral("Полный экран"));
+    };
+
+    const auto enterOrLeaveFullscreen = [this, updateFullscreenButton]() {
+        if (isFullScreen())
+        {
+            showMaximized();
+        }
+        else
+        {
+            showFullScreen();
+        }
+        updateFullscreenButton();
+    };
+
     connect(m_modeBox,
             qOverload<int>(&QComboBox::currentIndexChanged),
             this,
@@ -956,10 +1112,25 @@ void MainWindow::setupUi()
     connect(m_switchPlayerButton, &QPushButton::clicked, this, &MainWindow::switchSelfPlayer);
     connect(m_revealTurnButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
     connect(m_privacyRevealButton, &QPushButton::clicked, this, &MainWindow::revealSelfTurn);
+    connect(fullscreenButton, &QPushButton::clicked, this, enterOrLeaveFullscreen);
     connect(m_tavernList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
     connect(m_handList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
     connect(m_localBoardList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
     connect(m_remoteBoardList, &QListWidget::itemSelectionChanged, this, &MainWindow::updateUi);
+
+    auto *fullscreenShortcut = new QShortcut(QKeySequence(QStringLiteral("F11")), this);
+    connect(fullscreenShortcut, &QShortcut::activated, this, enterOrLeaveFullscreen);
+
+    auto *exitFullscreenShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(exitFullscreenShortcut, &QShortcut::activated, this, [this, updateFullscreenButton]() {
+        if (isFullScreen())
+        {
+            showMaximized();
+            updateFullscreenButton();
+        }
+    });
+
+    updateFullscreenButton();
 }
 
 void MainWindow::updateUi()
