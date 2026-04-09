@@ -12,6 +12,7 @@
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -641,43 +642,6 @@ void MainWindow::setupUi()
     rootLayout->setContentsMargins(20, 18, 20, 20);
     rootLayout->setSpacing(16);
 
-    auto *headerPanel = new QWidget(central);
-    headerPanel->setObjectName(QStringLiteral("headerPanel"));
-    auto *headerLayout = new QHBoxLayout(headerPanel);
-    headerLayout->setContentsMargins(24, 18, 24, 18);
-    headerLayout->setSpacing(18);
-
-    auto *headerTextLayout = new QVBoxLayout();
-    headerTextLayout->setSpacing(4);
-
-    auto *headerTitle = new QLabel(QStringLiteral("Qt Battlegrounds"), headerPanel);
-    headerTitle->setObjectName(QStringLiteral("headerTitle"));
-    auto *headerSubtitle = new QLabel(
-        QStringLiteral("Таверна, герои, ручные атаки и сетевые матчи в более широком и удобном интерфейсе."),
-        headerPanel);
-    headerSubtitle->setObjectName(QStringLiteral("headerSubtitle"));
-    headerSubtitle->setWordWrap(true);
-
-    headerTextLayout->addWidget(headerTitle);
-    headerTextLayout->addWidget(headerSubtitle);
-
-    auto *headerActionsLayout = new QVBoxLayout();
-    headerActionsLayout->setSpacing(8);
-
-    auto *fullscreenHintLabel = new QLabel(QStringLiteral("F11 - полноэкранный режим, Esc - выход"), headerPanel);
-    fullscreenHintLabel->setObjectName(QStringLiteral("fullscreenHintLabel"));
-    fullscreenHintLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
-    auto *fullscreenButton = new QPushButton(QStringLiteral("Полный экран"), headerPanel);
-    fullscreenButton->setObjectName(QStringLiteral("fullscreenButton"));
-    fullscreenButton->setMinimumWidth(190);
-
-    headerActionsLayout->addWidget(fullscreenHintLabel);
-    headerActionsLayout->addWidget(fullscreenButton, 0, Qt::AlignRight);
-
-    headerLayout->addLayout(headerTextLayout, 1);
-    headerLayout->addLayout(headerActionsLayout, 0);
-
     auto *contentSplitter = new QSplitter(Qt::Horizontal, central);
     contentSplitter->setChildrenCollapsible(false);
     contentSplitter->setHandleWidth(10);
@@ -773,6 +737,11 @@ void MainWindow::setupUi()
     m_readyButton = new QPushButton(QStringLiteral("Готов к бою"), actionsBox);
     m_switchPlayerButton = new QPushButton(QStringLiteral("Передать управление"), actionsBox);
     m_revealTurnButton = new QPushButton(QStringLiteral("Показать ход"), actionsBox);
+    auto *fullscreenHintLabel = new QLabel(QStringLiteral("F11 - полный экран, Esc - выход"), actionsBox);
+    fullscreenHintLabel->setObjectName(QStringLiteral("fullscreenHintLabel"));
+    fullscreenHintLabel->setWordWrap(true);
+    auto *fullscreenButton = new QPushButton(QStringLiteral("Полный экран"), actionsBox);
+    fullscreenButton->setObjectName(QStringLiteral("fullscreenButton"));
 
     actionsLayout->addWidget(m_refreshButton);
     actionsLayout->addWidget(m_buyButton);
@@ -783,6 +752,8 @@ void MainWindow::setupUi()
     actionsLayout->addWidget(m_readyButton);
     actionsLayout->addWidget(m_switchPlayerButton);
     actionsLayout->addWidget(m_revealTurnButton);
+    actionsLayout->addWidget(fullscreenHintLabel);
+    actionsLayout->addWidget(fullscreenButton);
 
     auto *tavernBox = new QGroupBox(QStringLiteral("Таверна"), this);
     tavernBox->setObjectName(QStringLiteral("tavernBox"));
@@ -855,7 +826,6 @@ void MainWindow::setupUi()
     contentSplitter->setStretchFactor(1, 1);
     contentSplitter->setSizes({360, 1120});
 
-    rootLayout->addWidget(headerPanel);
     rootLayout->addWidget(contentSplitter, 1);
 
     setCentralWidget(central);
@@ -880,19 +850,6 @@ void MainWindow::setupUi()
         "QWidget {"
         "  color: #f6e3bc;"
         "  font-size: 10pt;"
-        "}"
-        "QWidget#headerPanel {"
-        "  background-color: rgba(63, 33, 14, 228);"
-        "  border: 2px solid rgba(214, 163, 83, 210);"
-        "  border-radius: 22px;"
-        "}"
-        "QLabel#headerTitle {"
-        "  color: #ffe7ac;"
-        "  font: 700 22pt 'Georgia';"
-        "}"
-        "QLabel#headerSubtitle {"
-        "  color: rgba(255, 241, 210, 210);"
-        "  font: 11pt 'Trebuchet MS';"
         "}"
         "QLabel#fullscreenHintLabel {"
         "  color: rgba(255, 231, 188, 180);"
@@ -973,7 +930,7 @@ void MainWindow::setupUi()
         "  font: bold 10pt 'Segoe UI';"
         "}"
         "QPushButton#fullscreenButton {"
-        "  min-height: 40px;"
+        "  min-height: 38px;"
         "}"
         "QPushButton:hover {"
         "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
@@ -1075,16 +1032,37 @@ void MainWindow::setupUi()
                                       : QStringLiteral("Полный экран"));
     };
 
-    const auto enterOrLeaveFullscreen = [this, updateFullscreenButton]() {
+    const auto leaveFullscreenSafely = [this, updateFullscreenButton]() {
+        QTimer::singleShot(0, this, [this, updateFullscreenButton]() {
+            const Qt::WindowStates nextState =
+                (windowState() & ~Qt::WindowFullScreen) | Qt::WindowMaximized;
+            setWindowState(nextState);
+            show();
+            raise();
+            activateWindow();
+            updateFullscreenButton();
+        });
+    };
+
+    const auto enterFullscreenSafely = [this, updateFullscreenButton]() {
+        QTimer::singleShot(0, this, [this, updateFullscreenButton]() {
+            setWindowState(windowState() | Qt::WindowFullScreen);
+            show();
+            raise();
+            activateWindow();
+            updateFullscreenButton();
+        });
+    };
+
+    const auto enterOrLeaveFullscreen = [this, enterFullscreenSafely, leaveFullscreenSafely]() {
         if (isFullScreen())
         {
-            showMaximized();
+            leaveFullscreenSafely();
         }
         else
         {
-            showFullScreen();
+            enterFullscreenSafely();
         }
-        updateFullscreenButton();
     };
 
     connect(m_modeBox,
@@ -1122,11 +1100,10 @@ void MainWindow::setupUi()
     connect(fullscreenShortcut, &QShortcut::activated, this, enterOrLeaveFullscreen);
 
     auto *exitFullscreenShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
-    connect(exitFullscreenShortcut, &QShortcut::activated, this, [this, updateFullscreenButton]() {
+    connect(exitFullscreenShortcut, &QShortcut::activated, this, [this, leaveFullscreenSafely]() {
         if (isFullScreen())
         {
-            showMaximized();
-            updateFullscreenButton();
+            leaveFullscreenSafely();
         }
     });
 
