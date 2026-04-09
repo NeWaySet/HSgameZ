@@ -24,6 +24,16 @@ QString attackLine(const AutoBattlerGame::MinionCard &attacker, const AutoBattle
         .arg(target.health);
 }
 
+QString heroAttackLine(const AutoBattlerGame::MinionCard &attacker, const QString &heroName, int heroHealth)
+{
+    return QString("%1 [%2/%3] атакует героя %4 [здоровье %5]")
+        .arg(attacker.name)
+        .arg(attacker.attack)
+        .arg(attacker.health)
+        .arg(heroName)
+        .arg(heroHealth);
+}
+
 void removeDead(QVector<SimMinion> &board, QStringList &log, const QString &sideName)
 {
     for (int i = board.size() - 1; i >= 0; --i)
@@ -41,6 +51,26 @@ bool allAttacked(const QVector<SimMinion> &board)
     return std::all_of(board.cbegin(), board.cend(), [](const SimMinion &minion) {
         return minion.attackedThisCycle;
     });
+}
+
+bool hasTaunt(const QVector<SimMinion> &board)
+{
+    return std::any_of(board.cbegin(), board.cend(), [](const SimMinion &minion) {
+        return minion.card.taunt;
+    });
+}
+
+QVector<int> tauntIndexes(const QVector<SimMinion> &board)
+{
+    QVector<int> indexes;
+    for (int index = 0; index < board.size(); ++index)
+    {
+        if (board[index].card.taunt)
+        {
+            indexes.append(index);
+        }
+    }
+    return indexes;
 }
 
 void resetCycleIfNeeded(QVector<SimMinion> &board)
@@ -365,6 +395,8 @@ AutoBattlerGame::BattleResult AutoBattlerGame::resolveBattle(const PlayerSnapsho
     {
         QVector<SimMinion> &attackers = hostTurn ? hostBoard : clientBoard;
         QVector<SimMinion> &defenders = hostTurn ? clientBoard : hostBoard;
+        int &defenderHeroHealth = hostTurn ? result.clientHeroHealth : result.hostHeroHealth;
+        const QString defenderHeroName = hostTurn ? clientPlayer.heroName : hostPlayer.heroName;
 
         resetCycleIfNeeded(attackers);
         const int attackerIndex = nextAttackerIndex(attackers);
@@ -374,17 +406,51 @@ AutoBattlerGame::BattleResult AutoBattlerGame::resolveBattle(const PlayerSnapsho
             continue;
         }
 
-        const int targetIndex = QRandomGenerator::global()->bounded(defenders.size());
-        result.log.append(attackLine(attackers[attackerIndex].card, defenders[targetIndex].card));
+        const bool defendersHaveTaunt = hasTaunt(defenders);
+        const bool canHitHero = !defendersHaveTaunt;
+        const bool attackHero = canHitHero
+            && QRandomGenerator::global()->bounded(defenders.size() + 1) == defenders.size();
 
-        defenders[targetIndex].card.health -= attackers[attackerIndex].card.attack;
-        attackers[attackerIndex].card.health -= defenders[targetIndex].card.attack;
         attackers[attackerIndex].attackedThisCycle = true;
+
+        if (attackHero)
+        {
+            result.log.append(heroAttackLine(attackers[attackerIndex].card, defenderHeroName, defenderHeroHealth));
+            defenderHeroHealth = std::max(0, defenderHeroHealth - attackers[attackerIndex].card.attack);
+            result.log.append(QStringLiteral("%1 получает %2 урона и остаётся с %3 здоровья.")
+                                  .arg(defenderHeroName)
+                                  .arg(attackers[attackerIndex].card.attack)
+                                  .arg(defenderHeroHealth));
+
+            if (defenderHeroHealth <= 0)
+            {
+                result.log.append(QStringLiteral("Герой %1 пал прямо во время боя.").arg(defenderHeroName));
+                break;
+            }
+        }
+        else
+        {
+            int targetIndex = 0;
+            if (defendersHaveTaunt)
+            {
+                const QVector<int> taunts = tauntIndexes(defenders);
+                targetIndex = taunts.at(QRandomGenerator::global()->bounded(taunts.size()));
+            }
+            else
+            {
+                targetIndex = QRandomGenerator::global()->bounded(defenders.size());
+            }
+
+            result.log.append(attackLine(attackers[attackerIndex].card, defenders[targetIndex].card));
+
+            defenders[targetIndex].card.health -= attackers[attackerIndex].card.attack;
+            attackers[attackerIndex].card.health -= defenders[targetIndex].card.attack;
+        }
 
         removeDead(hostBoard, result.log, QStringLiteral("Хост"));
         removeDead(clientBoard, result.log, QStringLiteral("Клиент"));
 
-        if (hostBoard.isEmpty() || clientBoard.isEmpty())
+        if (hostBoard.isEmpty() || clientBoard.isEmpty() || result.hostHeroHealth <= 0 || result.clientHeroHealth <= 0)
         {
             break;
         }
@@ -392,7 +458,22 @@ AutoBattlerGame::BattleResult AutoBattlerGame::resolveBattle(const PlayerSnapsho
         hostTurn = !hostTurn;
     }
 
-    if (hostBoard.isEmpty() && clientBoard.isEmpty())
+    if (result.hostHeroHealth <= 0 && result.clientHeroHealth <= 0)
+    {
+        result.draw = true;
+        result.log.append(QStringLiteral("Оба героя пали. Ничья."));
+    }
+    else if (result.clientHeroHealth <= 0)
+    {
+        result.hostWon = true;
+        result.log.append(QStringLiteral("Хост побеждает, потому что герой клиента повержен."));
+    }
+    else if (result.hostHeroHealth <= 0)
+    {
+        result.clientWon = true;
+        result.log.append(QStringLiteral("Клиент побеждает, потому что герой хоста повержен."));
+    }
+    else if (hostBoard.isEmpty() && clientBoard.isEmpty())
     {
         result.draw = true;
         result.log.append(QStringLiteral("Оба стола опустели. Ничья."));
@@ -423,8 +504,9 @@ AutoBattlerGame::BattleResult AutoBattlerGame::resolveBattle(const PlayerSnapsho
 
 QString AutoBattlerGame::formatCard(const MinionCard &card)
 {
-    return QString("%1 | %2/%3 | цена %4")
+    return QString("%1%2 | %3/%4 | цена %5")
         .arg(card.name)
+        .arg(card.taunt ? QStringLiteral(" | Провокация") : QString())
         .arg(card.attack)
         .arg(card.health)
         .arg(card.cost);
@@ -432,8 +514,9 @@ QString AutoBattlerGame::formatCard(const MinionCard &card)
 
 QString AutoBattlerGame::formatBoardCard(const MinionCard &card)
 {
-    return QString("%1 | %2/%3")
+    return QString("%1%2 | %3/%4")
         .arg(card.name)
+        .arg(card.taunt ? QStringLiteral(" | Провокация") : QString())
         .arg(card.attack)
         .arg(card.health);
 }
@@ -500,18 +583,18 @@ AutoBattlerGame::BattleResult AutoBattlerGame::battleResultFromJson(const QJsonO
 QVector<AutoBattlerGame::BaseTemplate> AutoBattlerGame::cardPool() const
 {
     return {
-        {QStringLiteral("Тавернный громила"), 4, 4, 3},
-        {QStringLiteral("Лунный разведчик"), 2, 5, 3},
-        {QStringLiteral("Железный голем"), 5, 3, 4},
-        {QStringLiteral("Пироман"), 6, 2, 4},
-        {QStringLiteral("Лесной охотник"), 3, 3, 2},
-        {QStringLiteral("Болотный великан"), 7, 6, 5},
-        {QStringLiteral("Механический паук"), 2, 2, 1},
-        {QStringLiteral("Щитоносец таверны"), 1, 6, 2},
-        {QStringLiteral("Боевой волк"), 4, 2, 2},
-        {QStringLiteral("Штормовой адепт"), 3, 4, 3},
-        {QStringLiteral("Дракончик пепла"), 5, 5, 5},
-        {QStringLiteral("Кобольд-подрывник"), 6, 1, 2}
+        {QStringLiteral("Тавернный громила"), 4, 4, 3, false},
+        {QStringLiteral("Лунный разведчик"), 2, 5, 3, false},
+        {QStringLiteral("Железный голем"), 5, 3, 4, true},
+        {QStringLiteral("Пироман"), 6, 2, 4, false},
+        {QStringLiteral("Лесной охотник"), 3, 3, 2, false},
+        {QStringLiteral("Болотный великан"), 7, 6, 5, true},
+        {QStringLiteral("Механический паук"), 2, 2, 1, false},
+        {QStringLiteral("Щитоносец таверны"), 1, 6, 2, true},
+        {QStringLiteral("Боевой волк"), 4, 2, 2, false},
+        {QStringLiteral("Штормовой адепт"), 3, 4, 3, false},
+        {QStringLiteral("Дракончик пепла"), 5, 5, 5, false},
+        {QStringLiteral("Кобольд-подрывник"), 6, 1, 2, false}
     };
 }
 
@@ -526,6 +609,7 @@ AutoBattlerGame::MinionCard AutoBattlerGame::drawRandomCard()
     card.attack = base.attack;
     card.health = base.health;
     card.cost = base.cost;
+    card.taunt = base.taunt;
     return card;
 }
 
@@ -547,6 +631,7 @@ QJsonObject AutoBattlerGame::cardToJson(const MinionCard &card)
     object.insert(QStringLiteral("attack"), card.attack);
     object.insert(QStringLiteral("health"), card.health);
     object.insert(QStringLiteral("cost"), card.cost);
+    object.insert(QStringLiteral("taunt"), card.taunt);
     return object;
 }
 
@@ -558,6 +643,7 @@ AutoBattlerGame::MinionCard AutoBattlerGame::cardFromJson(const QJsonObject &obj
     card.attack = object.value(QStringLiteral("attack")).toInt(0);
     card.health = object.value(QStringLiteral("health")).toInt(0);
     card.cost = object.value(QStringLiteral("cost")).toInt(3);
+    card.taunt = object.value(QStringLiteral("taunt")).toBool(false);
     return card;
 }
 

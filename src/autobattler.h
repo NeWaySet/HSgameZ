@@ -16,6 +16,7 @@ public:
         int attack = 0;
         int health = 0;
         int cost = 3;
+        bool taunt = false;
     };
 
     struct HeroState
@@ -100,6 +101,7 @@ private:
         int attack = 0;
         int health = 0;
         int cost = 3;
+        bool taunt = false;
     };
 
     QVector<BaseTemplate> cardPool() const;

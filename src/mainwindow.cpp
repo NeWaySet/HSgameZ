@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 
+#include <QFont>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -378,9 +379,13 @@ void MainWindow::setupUi()
 {
     auto *central = new QWidget(this);
     auto *rootLayout = new QHBoxLayout(central);
+    rootLayout->setContentsMargins(22, 22, 22, 22);
+    rootLayout->setSpacing(18);
 
     auto *leftColumn = new QVBoxLayout();
     auto *rightColumn = new QVBoxLayout();
+    leftColumn->setSpacing(16);
+    rightColumn->setSpacing(16);
 
     auto *networkBox = new QGroupBox(QStringLiteral("Режим и сеть"), this);
     auto *networkLayout = new QFormLayout(networkBox);
@@ -422,8 +427,12 @@ void MainWindow::setupUi()
     m_goldLabel = new QLabel(stateBox);
     m_localHeroLabel = new QLabel(stateBox);
     m_remoteHeroLabel = new QLabel(stateBox);
+    m_activePlayerLabel->setWordWrap(true);
+    m_localHeroLabel->setWordWrap(true);
+    m_remoteHeroLabel->setWordWrap(true);
     m_statusLabel = new QLabel(QStringLiteral("Выберите режим и начните матч."), stateBox);
     m_statusLabel->setWordWrap(true);
+    m_statusLabel->setMinimumHeight(54);
 
     stateLayout->addRow(QStringLiteral("Активный игрок"), m_activePlayerLabel);
     stateLayout->addRow(QStringLiteral("Раунд"), m_roundLabel);
@@ -453,11 +462,13 @@ void MainWindow::setupUi()
     auto *tavernBox = new QGroupBox(QStringLiteral("Таверна"), this);
     auto *tavernLayout = new QVBoxLayout(tavernBox);
     m_tavernList = new QListWidget(tavernBox);
+    m_tavernList->setAlternatingRowColors(true);
     tavernLayout->addWidget(m_tavernList);
 
     auto *handBox = new QGroupBox(QStringLiteral("Рука"), this);
     auto *handLayout = new QVBoxLayout(handBox);
     m_handList = new QListWidget(handBox);
+    m_handList->setAlternatingRowColors(true);
     handLayout->addWidget(m_handList);
 
     auto *boardsBox = new QGroupBox(QStringLiteral("Стол"), this);
@@ -467,6 +478,8 @@ void MainWindow::setupUi()
 
     m_localBoardList = new QListWidget(boardsBox);
     m_remoteBoardList = new QListWidget(boardsBox);
+    m_localBoardList->setAlternatingRowColors(true);
+    m_remoteBoardList->setAlternatingRowColors(true);
 
     localBoardLayout->addWidget(new QLabel(QStringLiteral("Текущий стол"), boardsBox));
     localBoardLayout->addWidget(m_localBoardList);
@@ -498,10 +511,121 @@ void MainWindow::setupUi()
     setCentralWidget(central);
     setWindowTitle(QStringLiteral("Qt Battlegrounds"));
     resize(1240, 760);
+    setFont(QFont(QStringLiteral("Segoe UI"), 10));
+
+    setStyleSheet(QStringLiteral(
+        "QMainWindow {"
+        "  background-color: #1a120d;"
+        "  background-image: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+        "      stop:0 #2c1d12, stop:0.35 #3f2919, stop:0.7 #1e140d, stop:1 #120c08);"
+        "  color: #f7e4bf;"
+        "}"
+        "QWidget {"
+        "  color: #f6e2bb;"
+        "  font-size: 10pt;"
+        "}"
+        "QGroupBox {"
+        "  background-color: rgba(37, 23, 15, 208);"
+        "  border: 2px solid rgba(173, 122, 58, 190);"
+        "  border-radius: 16px;"
+        "  margin-top: 16px;"
+        "  padding: 18px 14px 14px 14px;"
+        "}"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  left: 14px;"
+        "  padding: 2px 10px;"
+        "  color: #ffd78d;"
+        "  background-color: rgba(93, 58, 24, 220);"
+        "  border: 1px solid rgba(221, 173, 91, 170);"
+        "  border-radius: 9px;"
+        "  font: bold 11pt 'Georgia';"
+        "}"
+        "QLabel {"
+        "  color: #f3e0bf;"
+        "}"
+        "QLineEdit, QSpinBox, QComboBox, QListWidget, QTextEdit {"
+        "  background-color: rgba(244, 227, 193, 232);"
+        "  color: #2b190d;"
+        "  border: 2px solid rgba(143, 101, 45, 180);"
+        "  border-radius: 12px;"
+        "  padding: 6px 8px;"
+        "  selection-background-color: #7c3f17;"
+        "  selection-color: #fff3d6;"
+        "}"
+        "QComboBox::drop-down {"
+        "  border: none;"
+        "  width: 22px;"
+        "}"
+        "QListWidget::item, QTextEdit {"
+        "  padding: 6px;"
+        "}"
+        "QListWidget::item:alternate {"
+        "  background-color: rgba(124, 90, 48, 28);"
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: rgba(127, 63, 24, 215);"
+        "  color: #fff2d5;"
+        "}"
+        "QPushButton {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "      stop:0 #f5c768, stop:0.52 #c8842e, stop:1 #8b5617);"
+        "  color: #291407;"
+        "  border: 2px solid #f1dfab;"
+        "  border-radius: 14px;"
+        "  padding: 9px 14px;"
+        "  font: bold 10pt 'Segoe UI';"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "      stop:0 #ffdb84, stop:0.55 #df9e3e, stop:1 #9e6220);"
+        "}"
+        "QPushButton:pressed {"
+        "  padding-top: 11px;"
+        "  padding-bottom: 7px;"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "      stop:0 #bb7b27, stop:1 #6f430f);"
+        "}"
+        "QPushButton:disabled {"
+        "  background-color: rgba(104, 82, 53, 170);"
+        "  color: rgba(255, 240, 214, 120);"
+        "  border-color: rgba(220, 207, 176, 90);"
+        "}"
+        "QScrollBar:vertical {"
+        "  background: rgba(54, 33, 20, 180);"
+        "  width: 12px;"
+        "  margin: 10px 0 10px 0;"
+        "  border-radius: 6px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "  background: rgba(226, 181, 97, 180);"
+        "  min-height: 24px;"
+        "  border-radius: 6px;"
+        "}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+        "  border: none;"
+        "  background: none;"
+        "}"
+    ));
+
+    const QString heroPanelStyle = QStringLiteral(
+        "padding: 8px 10px;"
+        "background-color: rgba(92, 56, 24, 170);"
+        "border: 1px solid rgba(246, 214, 150, 130);"
+        "border-radius: 12px;"
+        "color: #fff0cf;");
+    m_connectionLabel->setStyleSheet(heroPanelStyle);
+    m_statusLabel->setStyleSheet(heroPanelStyle);
+    m_localHeroLabel->setStyleSheet(heroPanelStyle);
+    m_remoteHeroLabel->setStyleSheet(heroPanelStyle);
+    m_activePlayerLabel->setStyleSheet(heroPanelStyle);
+    m_roundLabel->setStyleSheet(heroPanelStyle);
+    m_goldLabel->setStyleSheet(heroPanelStyle);
 
     m_privacyOverlay = new QWidget(central);
     m_privacyOverlay->setAttribute(Qt::WA_StyledBackground, true);
-    m_privacyOverlay->setStyleSheet(QStringLiteral("background-color: rgba(12, 16, 24, 228);"));
+    m_privacyOverlay->setStyleSheet(QStringLiteral(
+        "background-color: rgba(18, 9, 4, 236);"));
     m_privacyOverlay->setGeometry(central->rect());
 
     auto *overlayLayout = new QVBoxLayout(m_privacyOverlay);
@@ -511,9 +635,9 @@ void MainWindow::setupUi()
     auto *overlayPanel = new QWidget(m_privacyOverlay);
     overlayPanel->setAttribute(Qt::WA_StyledBackground, true);
     overlayPanel->setStyleSheet(QStringLiteral(
-        "background-color: rgba(255, 248, 236, 242);"
-        "border: 2px solid rgba(127, 86, 44, 180);"
-        "border-radius: 18px;"));
+        "background-color: rgba(243, 224, 187, 244);"
+        "border: 2px solid rgba(190, 143, 70, 220);"
+        "border-radius: 22px;"));
     overlayPanel->setMaximumWidth(520);
 
     auto *overlayPanelLayout = new QVBoxLayout(overlayPanel);
@@ -524,12 +648,15 @@ void MainWindow::setupUi()
     QFont overlayTitleFont = m_privacyTitleLabel->font();
     overlayTitleFont.setPointSize(18);
     overlayTitleFont.setBold(true);
+    overlayTitleFont.setFamily(QStringLiteral("Georgia"));
     m_privacyTitleLabel->setFont(overlayTitleFont);
     m_privacyTitleLabel->setAlignment(Qt::AlignCenter);
+    m_privacyTitleLabel->setStyleSheet(QStringLiteral("color: #5a2f13;"));
 
     m_privacyTextLabel = new QLabel(overlayPanel);
     m_privacyTextLabel->setWordWrap(true);
     m_privacyTextLabel->setAlignment(Qt::AlignCenter);
+    m_privacyTextLabel->setStyleSheet(QStringLiteral("color: #4a2b15; font-size: 10.5pt;"));
 
     m_privacyRevealButton = new QPushButton(QStringLiteral("Показать ход"), overlayPanel);
     m_privacyRevealButton->setMinimumHeight(40);
